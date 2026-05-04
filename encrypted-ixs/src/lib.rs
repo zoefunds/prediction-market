@@ -20,20 +20,7 @@ mod circuits {
         amount: u64,
     }
 
-    pub struct ResolutionOutput {
-        winning_outcome: u8,
-        yes_pool: u64,
-        no_pool: u64,
-    }
-
-    pub struct PayoutOutput {
-        amount: u64,
-    }
-
     /// Add a user's encrypted position to the market's encrypted totals.
-    /// Returns:
-    ///   - the user's position (encrypted to the user) — they keep a receipt
-    ///   - the updated market totals (encrypted to MXE) — written back on-chain
     #[instruction]
     pub fn submit_position(
         position_ctxt: Enc<Shared, PositionInput>,
@@ -62,7 +49,6 @@ mod circuits {
     }
 
     /// Reveal the resolution: which side won, and the two pool totals.
-    /// Individual positions remain hidden — only aggregates surface.
     #[instruction]
     pub fn resolve_market(
         outcome_ctxt: Enc<Shared, u8>,
@@ -74,34 +60,16 @@ mod circuits {
         (outcome, totals.yes_pool, totals.no_pool).reveal()
     }
 
-    /// Compute one user's payout, given the (now public) winning outcome
-    /// and pool totals. Only the claimer learns the value (encrypted to them).
-    ///
-    /// Parimutuel: payout = stake * total_pool / winning_pool, only if won.
+    /// Reveal whether this user won and their staked amount.
+    /// Payout math is done on-chain in plaintext (cheap u64 ops).
+    /// This circuit is small (no division, no big multiplication).
     #[instruction]
     pub fn claim_payout(
         user_position_ctxt: Enc<Shared, UserPosition>,
         winning_outcome: u8,
-        yes_pool: u64,
-        no_pool: u64,
-    ) -> Enc<Shared, PayoutOutput> {
+    ) -> (bool, u64) {
         let pos = user_position_ctxt.to_arcis();
-        let total_pool = yes_pool + no_pool;
-
-        let winning_pool = if winning_outcome == 1u8 { yes_pool } else { no_pool };
-        let user_won = pos.outcome == winning_outcome;
-        let safe_winning_pool = if winning_pool == 0u64 { 1u64 } else { winning_pool };
-
-        let gross = (pos.amount * total_pool) / safe_winning_pool;
-
-        let payout = if user_won && winning_pool > 0u64 {
-            gross
-        } else {
-            0u64
-        };
-
-        user_position_ctxt
-            .owner
-            .from_arcis(PayoutOutput { amount: payout })
+        let won = pos.outcome == winning_outcome;
+        (won, pos.amount).reveal()
     }
 }

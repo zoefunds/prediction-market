@@ -2,14 +2,15 @@ use anchor_lang::prelude::*;
 use arcium_anchor::prelude::*;
 use arcium_client::idl::arcium::types::CallbackAccount;
 
-use crate::{ArciumSignerAccount, 
+use crate::{
     constants::{COMP_DEF_OFFSET_CLAIM_PAYOUT, MARKET_SEED, POSITION_SEED, VAULT_SEED},
     error::ErrorCode,
     events::PayoutClaimed,
     state::{Market, MarketStatus, Position},
-    ID, ID_CONST,
+    ArciumSignerAccount, ID, ID_CONST,
 };
 
+// ── Queue ────────────────────────────────────────────────────────────────────
 #[queue_computation_accounts("claim_payout", payer)]
 #[derive(Accounts)]
 #[instruction(computation_offset: u64)]
@@ -83,14 +84,13 @@ pub fn claim_payout_handler(
 
     ctx.accounts.sign_pda_account.bump = ctx.bumps.sign_pda_account;
 
+    // claim_payout(user_position: Enc<Shared, UserPosition>, winning_outcome: u8) -> (bool, u64) revealed.
     let args = ArgBuilder::new()
         .x25519_pubkey(position.user_pubkey)
         .plaintext_u128(position.nonce)
         .encrypted_u8(slice_32(&position.ciphertext, 0))
         .encrypted_u64(slice_32(&position.ciphertext, 1))
         .plaintext_u8(market.winning_outcome)
-        .plaintext_u64(market.yes_pool)
-        .plaintext_u64(market.no_pool)
         .build();
 
     let extra_accounts = vec![
@@ -109,13 +109,14 @@ pub fn claim_payout_handler(
             &ctx.accounts.mxe_account,
             &extra_accounts,
         )?],
-        1,
+        2, // (bool, u64) revealed
         0,
     )?;
 
     Ok(())
 }
 
+// ── Callback ────────────────────────────────────────────────────────────────
 #[callback_accounts("claim_payout")]
 #[derive(Accounts)]
 pub struct ClaimPayoutCallback<'info> {
@@ -159,18 +160,56 @@ pub fn claim_payout_callback_handler(
         Err(_) => return Err(ErrorCode::AbortedComputation.into()),
     };
 
-    // ClaimPayoutOutput { field_0: ClaimPayoutOutputStruct0 } where StructO is Enc<Shared, PayoutOutput>.
-    // The encrypted ciphertext is opaque on-chain — we mark claimed and emit the receipt.
-    // TODO(claim-v2): Add a public-reveal of the payout amount and execute lamport transfer here.
-    let _user_payout_ciphertext = &result.field_0;
+    // ClaimPayoutOutput { field_0: ClaimPayoutOutputStruct0 { field_0: bool, field_1: u64 } }
+    let inner = &result.field_0;
+    let won = inner.field_0;
+    let amount = inner.field_1;
 
+    let market = &ctx.accounts.market;
     let position = &mut ctx.accounts.position;
+
+    // Compute payout in plaintext.
+    let payout: u64 = if won {
+        let total_pool = market
+            .yes_pool
+            .checked_add(market.no_pool)
+            .ok_or(ErrorCode::AbortedComputation)?;
+        let winning_pool = if market.winning_outcome == 1 {
+            market.yes_pool
+        } else {
+            market.no_pool
+        };
+        if winning_pool == 0 {
+            0
+        } else {
+            // amount * total_pool / winning_pool
+            let scaled = (amount as u128)
+                .checked_mul(total_pool as u128)
+                .ok_or(ErrorCode::AbortedComputation)?;
+            (scaled / winning_pool as u128) as u64
+        }
+    } else {
+        0
+    };
+
     position.claimed = true;
+
+    // Transfer payout from vault to recipient.
+    if payout > 0 {
+        let vault_lamports = **ctx.accounts.vault.lamports.borrow();
+        require!(
+            vault_lamports >= payout,
+            ErrorCode::InsufficientVaultBalance
+        );
+
+        **ctx.accounts.vault.try_borrow_mut_lamports()? -= payout;
+        **ctx.accounts.recipient.try_borrow_mut_lamports()? += payout;
+    }
 
     emit!(PayoutClaimed {
         market: ctx.accounts.market.key(),
         user: ctx.accounts.recipient.key(),
-        amount: 0, // hidden in v1
+        amount: payout,
         timestamp: Clock::get()?.unix_timestamp,
     });
 

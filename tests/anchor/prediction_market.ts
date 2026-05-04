@@ -1,7 +1,7 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
-import { PublicKey } from "@solana/web3.js";
-import { PredictionMarket } from "../target/types/prediction_market";
+import { PublicKey, Keypair, SystemProgram } from "@solana/web3.js";
+import { PredictionMarket } from "../../target/types/prediction_market";
 import { randomBytes } from "crypto";
 import {
   awaitComputationFinalization,
@@ -27,74 +27,199 @@ import * as fs from "fs";
 import * as os from "os";
 import { expect } from "chai";
 
+// ─── Helpers ──────────────────────────────────────────────────────────────
+function readKpJson(path: string): Keypair {
+  const file = fs.readFileSync(path);
+  return Keypair.fromSecretKey(new Uint8Array(JSON.parse(file.toString())));
+}
+
+async function getMXEPublicKeyWithRetry(
+  provider: anchor.AnchorProvider,
+  programId: PublicKey,
+  maxRetries = 20,
+  retryDelayMs = 500,
+): Promise<Uint8Array> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const k = await getMXEPublicKey(provider, programId);
+      if (k) return k;
+    } catch (e) {
+      // retry
+    }
+    if (attempt < maxRetries) {
+      await new Promise((r) => setTimeout(r, retryDelayMs));
+    }
+  }
+  throw new Error(`Failed to fetch MXE public key after ${maxRetries} attempts`);
+}
+
+// 32-byte chunk extractor matching the on-chain `slice_32` helper.
+function chunk(buf: Uint8Array, idx: number): Uint8Array {
+  return buf.slice(idx * 32, (idx + 1) * 32);
+}
+
+// Pack N ciphertexts (each 32 bytes) into one Buffer.
+// Accepts number[][] (RescueCipher output) or Uint8Array[].
+function packCiphertexts(cts: Array<Uint8Array | number[]>): Buffer {
+  return Buffer.concat(cts.map((c) => Buffer.from(c)));
+}
+
+// ─── Tests ────────────────────────────────────────────────────────────────
 describe("PredictionMarket", () => {
-  // Configure the client to use the local cluster.
   anchor.setProvider(anchor.AnchorProvider.env());
-  const program = anchor.workspace
-    .PredictionMarket as Program<PredictionMarket>;
-  const provider = anchor.getProvider();
-  const arciumProgram = getArciumProgram(provider as anchor.AnchorProvider);
+  const program = anchor.workspace.PredictionMarket as Program<PredictionMarket>;
+  const provider = anchor.getProvider() as anchor.AnchorProvider;
+  const arciumProgram = getArciumProgram(provider);
 
   type Event = anchor.IdlEvents<(typeof program)["idl"]>;
   const awaitEvent = async <E extends keyof Event>(
     eventName: E,
   ): Promise<Event[E]> => {
-    let listenerId: number;
+    let listenerId: number = 0;
     const event = await new Promise<Event[E]>((res) => {
-      listenerId = program.addEventListener(eventName, (event) => {
-        res(event);
-      });
+      listenerId = program.addEventListener(eventName, (e) => res(e));
     });
     await program.removeEventListener(listenerId);
-
     return event;
   };
 
   const arciumEnv = getArciumEnv();
   const clusterAccount = getClusterAccAddress(arciumEnv.arciumClusterOffset);
 
-  it("Is initialized!", async () => {
-    const owner = readKpJson(`${os.homedir()}/.config/solana/id.json`);
+  const owner = readKpJson(`${os.homedir()}/.config/solana/id.json`);
 
-    console.log("Initializing add together computation definition");
-    const initATSig = await initAddTogetherCompDef(program, owner);
-    console.log(
-      "Add together computation definition initialized with signature",
-      initATSig,
+  // Will be populated as the tests run.
+  let mxePublicKey: Uint8Array;
+  let userPrivKey: Uint8Array;
+  let userPubKey: Uint8Array;
+  let cipher: RescueCipher;
+
+  let configPda: PublicKey;
+  let marketPda: PublicKey;
+  let vaultPda: PublicKey;
+  let positionPda: PublicKey;
+
+  // Initial market totals plaintext: yes_pool=0, no_pool=0, total_positions=0
+  let initialTotalsCiphertext: Buffer;
+  let initialTotalsNonce: Buffer;
+
+  before("setup MXE keys + cipher", async () => {
+    mxePublicKey = await getMXEPublicKeyWithRetry(provider, program.programId);
+    userPrivKey = x25519.utils.randomSecretKey();
+    userPubKey = x25519.getPublicKey(userPrivKey);
+    const sharedSecret = x25519.getSharedSecret(userPrivKey, mxePublicKey);
+    cipher = new RescueCipher(sharedSecret);
+
+    [configPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("config")],
+      program.programId,
     );
+  });
 
-    const mxePublicKey = await getMXEPublicKeyWithRetry(
-      provider as anchor.AnchorProvider,
+  it("initializes the global config", async () => {
+    // Skip if already initialized (idempotent re-runs).
+    const info = await provider.connection.getAccountInfo(configPda);
+    if (info) {
+      console.log("Config already exists, skipping init.");
+      return;
+    }
+
+    const sig = await program.methods
+      .initialize(100, owner.publicKey) // 1% fee, fee_recipient = owner
+      .accounts({
+        authority: owner.publicKey,
+      })
+      .signers([owner])
+      .rpc({ commitment: "confirmed" });
+
+    console.log("Initialize tx:", sig);
+    const cfg = await program.account.config.fetch(configPda);
+    expect(cfg.feeBps).to.equal(100);
+    expect(cfg.marketCount.toNumber()).to.equal(0);
+  });
+
+  it("initializes all three CompDefs and uploads circuits", async () => {
+    await initCompDef(program, owner, "submit_position");
+    await initCompDef(program, owner, "resolve_market");
+    await initCompDef(program, owner, "claim_payout");
+  });
+
+  it("creates a market with encrypted-zero initial totals", async () => {
+    // Encrypt initial MarketTotals { yes_pool: 0, no_pool: 0, total_positions: 0 } against MXE.
+    // For initial creation we encrypt to MXE directly using our own keypair as sender.
+    const totalsPlaintext: bigint[] = [BigInt(0), BigInt(0), BigInt(0)];
+    const nonce = randomBytes(16);
+    const encryptedTotals = cipher.encrypt(totalsPlaintext, nonce);
+    initialTotalsCiphertext = packCiphertexts(encryptedTotals);
+    initialTotalsNonce = nonce;
+
+    const cfg = await program.account.config.fetch(configPda);
+    [marketPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("market"), cfg.marketCount.toArrayLike(Buffer, "le", 8)],
+      program.programId,
+    );
+    [vaultPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("vault"), marketPda.toBuffer()],
       program.programId,
     );
 
-    console.log("MXE x25519 pubkey is", mxePublicKey);
+    const closeTs = new anchor.BN(Math.floor(Date.now() / 1000) + 3600);
 
-    const privateKey = x25519.utils.randomSecretKey();
-    const publicKey = x25519.getPublicKey(privateKey);
+    const sig = await program.methods
+      .createMarket(
+        "Will ETH hit $5k by Dec?",
+        "Resolves YES if any major exchange shows a print >= $5000 USD before Dec 31 23:59 UTC.",
+        "crypto",
+        closeTs,
+        owner.publicKey,
+        Array.from(initialTotalsCiphertext),
+        Array.from(userPubKey),
+        new anchor.BN(deserializeLE(initialTotalsNonce).toString()),
+      )
+      .accounts({
+        creator: owner.publicKey,
+      })
+      .signers([owner])
+      .rpc({ commitment: "confirmed" });
 
-    const sharedSecret = x25519.getSharedSecret(privateKey, mxePublicKey);
-    const cipher = new RescueCipher(sharedSecret);
+    console.log("Market created:", sig);
+    const market = await program.account.market.fetch(marketPda);
+    expect(market.id.toNumber()).to.equal(cfg.marketCount.toNumber());
+    expect(market.totalPositions).to.equal(0);
+  });
 
-    const val1 = BigInt(1);
-    const val2 = BigInt(2);
-    const plaintext = [val1, val2];
+  it("submits an encrypted position", async () => {
+    // User wants to bet 0.1 SOL on YES (outcome=1).
+    const outcome = BigInt(1);
+    const amount = BigInt(100_000_000); // lamports
+    const positionPlaintext = [outcome, amount];
 
-    const nonce = randomBytes(16);
-    const ciphertext = cipher.encrypt(plaintext, nonce);
+    const positionNonce = randomBytes(16);
+    const encryptedPosition = cipher.encrypt(positionPlaintext, positionNonce);
+    const positionCiphertext = packCiphertexts(encryptedPosition);
 
-    const sumEventPromise = awaitEvent("sumEvent");
+    [positionPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("position"), marketPda.toBuffer(), owner.publicKey.toBuffer()],
+      program.programId,
+    );
+
     const computationOffset = new anchor.BN(randomBytes(8), "hex");
 
+    const positionEventPromise = awaitEvent("positionSubmitted");
+
     const queueSig = await program.methods
-      .addTogether(
+      .submitPosition(
         computationOffset,
-        Array.from(ciphertext[0]),
-        Array.from(ciphertext[1]),
-        Array.from(publicKey),
-        new anchor.BN(deserializeLE(nonce).toString()),
+        Array.from(positionCiphertext),
+        Array.from(userPubKey),
+        new anchor.BN(deserializeLE(positionNonce).toString()),
+        new anchor.BN(amount.toString()),
       )
       .accountsPartial({
+        payer: owner.publicKey,
+        market: marketPda,
+        vault: vaultPda,
+        position: positionPda,
         computationAccount: getComputationAccAddress(
           arciumEnv.arciumClusterOffset,
           computationOffset,
@@ -102,115 +227,89 @@ describe("PredictionMarket", () => {
         clusterAccount,
         mxeAccount: getMXEAccAddress(program.programId),
         mempoolAccount: getMempoolAccAddress(arciumEnv.arciumClusterOffset),
-        executingPool: getExecutingPoolAccAddress(
-          arciumEnv.arciumClusterOffset,
-        ),
+        executingPool: getExecutingPoolAccAddress(arciumEnv.arciumClusterOffset),
         compDefAccount: getCompDefAccAddress(
           program.programId,
-          Buffer.from(getCompDefAccOffset("add_together")).readUInt32LE(),
+          Buffer.from(getCompDefAccOffset("submit_position")).readUInt32LE(),
         ),
       })
+      .signers([owner])
       .rpc({ skipPreflight: true, commitment: "confirmed" });
-    console.log("Queue sig is ", queueSig);
+
+    console.log("submit_position queue tx:", queueSig);
 
     const finalizeSig = await awaitComputationFinalization(
-      provider as anchor.AnchorProvider,
+      provider,
       computationOffset,
       program.programId,
       "confirmed",
     );
-    console.log("Finalize sig is ", finalizeSig);
+    console.log("submit_position finalize tx:", finalizeSig);
 
-    const sumEvent = await sumEventPromise;
-    const decrypted = cipher.decrypt([sumEvent.sum], sumEvent.nonce)[0];
-    expect(decrypted).to.equal(val1 + val2);
+    const event = await positionEventPromise;
+    expect(event.market.toString()).to.equal(marketPda.toString());
+    expect(event.user.toString()).to.equal(owner.publicKey.toString());
+
+    // Verify Position got its encrypted ciphertext written by the callback.
+    const position = await program.account.position.fetch(positionPda);
+    expect(position.claimed).to.equal(false);
+    expect(position.stakeAmount.toString()).to.equal(amount.toString());
+    expect(Array.from(position.ciphertext).some((b) => b !== 0)).to.equal(true);
   });
 
-  async function initAddTogetherCompDef(
-    program: Program<PredictionMarket>,
-    owner: anchor.web3.Keypair,
-  ): Promise<string> {
-    const baseSeedCompDefAcc = getArciumAccountBaseSeed(
-      "ComputationDefinitionAccount",
-    );
-    const offset = getCompDefAccOffset("add_together");
+  // Note: resolve_market test is gated on close_ts being in the past.
+  // For local testing we'd warp the clock; on devnet we'd wait. Skipping for now.
+  it.skip("resolves a market and reveals winner", async () => {
+    // TODO: implement when local test infrastructure includes clock warping
+  });
 
+  it.skip("claims payout for the winning side", async () => {
+    // TODO: depends on resolution
+  });
+
+  // ─── helpers below the describe block ──────────────────────────────────
+  async function initCompDef(
+    p: Program<PredictionMarket>,
+    o: Keypair,
+    circuitName: "submit_position" | "resolve_market" | "claim_payout",
+  ): Promise<string> {
+    const baseSeed = getArciumAccountBaseSeed("ComputationDefinitionAccount");
+    const offset = getCompDefAccOffset(circuitName);
     const compDefPDA = PublicKey.findProgramAddressSync(
-      [baseSeedCompDefAcc, program.programId.toBuffer(), offset],
+      [baseSeed, p.programId.toBuffer(), offset],
       getArciumProgramId(),
     )[0];
 
-    console.log("Comp def pda is ", compDefPDA);
-
-    const mxeAccount = getMXEAccAddress(program.programId);
+    const mxeAccount = getMXEAccAddress(p.programId);
     const mxeAcc = await arciumProgram.account.mxeAccount.fetch(mxeAccount);
-    const lutAddress = getLookupTableAddress(program.programId, mxeAcc.lutOffsetSlot);
+    const lutAddress = getLookupTableAddress(p.programId, mxeAcc.lutOffsetSlot);
 
-    const sig = await program.methods
-      .initAddTogetherCompDef()
+    const methodFn =
+      circuitName === "submit_position"
+        ? p.methods.initSubmitPositionCompDef()
+        : circuitName === "resolve_market"
+          ? p.methods.initResolveMarketCompDef()
+          : p.methods.initClaimPayoutCompDef();
+
+    const sig = await methodFn
       .accounts({
         compDefAccount: compDefPDA,
-        payer: owner.publicKey,
+        payer: o.publicKey,
         mxeAccount,
         addressLookupTable: lutAddress,
       })
-      .signers([owner])
-      .rpc({
-        commitment: "confirmed",
-      });
-    console.log("Init add together computation definition transaction", sig);
+      .signers([o])
+      .rpc({ commitment: "confirmed" });
 
-    const rawCircuit = fs.readFileSync("build/add_together.arcis");
-    await uploadCircuit(
-      provider as anchor.AnchorProvider,
-      "add_together",
-      program.programId,
-      rawCircuit,
-      true,
-      500,
-      {
-        skipPreflight: true,
-        preflightCommitment: "confirmed",
-        commitment: "confirmed",
-      },
-    );
+    console.log(`init ${circuitName} comp def:`, sig);
+
+    const rawCircuit = fs.readFileSync(`build/${circuitName}.arcis`);
+    await uploadCircuit(provider, circuitName, p.programId, rawCircuit, true, 500, {
+      skipPreflight: true,
+      preflightCommitment: "confirmed",
+      commitment: "confirmed",
+    });
 
     return sig;
   }
 });
-
-async function getMXEPublicKeyWithRetry(
-  provider: anchor.AnchorProvider,
-  programId: PublicKey,
-  maxRetries: number = 20,
-  retryDelayMs: number = 500,
-): Promise<Uint8Array> {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      const mxePublicKey = await getMXEPublicKey(provider, programId);
-      if (mxePublicKey) {
-        return mxePublicKey;
-      }
-    } catch (error) {
-      console.log(`Attempt ${attempt} failed to fetch MXE public key:`, error);
-    }
-
-    if (attempt < maxRetries) {
-      console.log(
-        `Retrying in ${retryDelayMs}ms... (attempt ${attempt}/${maxRetries})`,
-      );
-      await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
-    }
-  }
-
-  throw new Error(
-    `Failed to fetch MXE public key after ${maxRetries} attempts`,
-  );
-}
-
-function readKpJson(path: string): anchor.web3.Keypair {
-  const file = fs.readFileSync(path);
-  return anchor.web3.Keypair.fromSecretKey(
-    new Uint8Array(JSON.parse(file.toString())),
-  );
-}
