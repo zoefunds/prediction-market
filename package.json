@@ -1,0 +1,35 @@
+{
+  "name": "prediction-market",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Confidential prediction & opinion market on Solana, powered by Arcium",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zoefunds/prediction-market.git"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.15.9",
+  "scripts": {
+    "app:dev": "pnpm --filter @pm/app dev",
+    "app:build": "pnpm --filter @pm/app build",
+    "backend:build": "pnpm --filter @pm/backend build",
+    "backend:serve": "pnpm --filter @pm/backend serve",
+    "backend:deploy": "pnpm --filter @pm/backend deploy",
+    "program:build": "anchor build",
+    "program:test": "anchor test",
+    "program:deploy": "anchor deploy --provider.cluster devnet",
+    "arcium:build": "arcium build",
+    "lint": "pnpm -r --if-present run lint",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
+    "clean": "pnpm -r --if-present run clean && rm -rf node_modules target"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3",
+    "typescript": "^5.6.3",
+    "@types/node": "^20.16.10"
+  }
+}
