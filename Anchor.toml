@@ -1,0 +1,22 @@
+[toolchain]
+package_manager = "pnpm"
+anchor_version = "0.32.1"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.localnet]
+prediction_market = "3yC9BuiC3kkkjDw1wFtW4AxXmezRM3U8GfWRxGoqxd7A"
+
+[programs.devnet]
+prediction_market = "3yC9BuiC3kkkjDw1wFtW4AxXmezRM3U8GfWRxGoqxd7A"
+
+[provider]
+cluster = "devnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "pnpm exec ts-mocha -p ./tsconfig.anchor.json -t 1000000 tests/anchor/**/*.ts"
+
+[hooks]
