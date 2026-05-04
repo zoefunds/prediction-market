@@ -50,6 +50,72 @@ pub mod prediction_market {
         )
     }
 
+    // ── Position submission (encrypted) ─────────────────────────────────────
+    pub fn submit_position(
+        ctx: Context<SubmitPosition>,
+        computation_offset: u64,
+        position_ciphertext: [u8; 64],
+        user_pubkey: [u8; 32],
+        nonce: u128,
+        stake_amount: u64,
+    ) -> Result<()> {
+        instructions::submit_position::submit_position_handler(
+            ctx,
+            computation_offset,
+            position_ciphertext,
+            user_pubkey,
+            nonce,
+            stake_amount,
+        )
+    }
+
+    #[arcium_callback(encrypted_ix = "submit_position")]
+    pub fn submit_position_callback(
+        ctx: Context<SubmitPositionCallback>,
+        output: SignedComputationOutputs<SubmitPositionOutput>,
+    ) -> Result<()> {
+        instructions::submit_position::submit_position_callback_handler(ctx, output)
+    }
+
+    // ── Resolution ──────────────────────────────────────────────────────────
+    pub fn request_resolution(
+        ctx: Context<RequestResolution>,
+        computation_offset: u64,
+        outcome_ciphertext: [u8; 32],
+        resolver_pubkey: [u8; 32],
+        nonce: u128,
+    ) -> Result<()> {
+        instructions::resolve_market::request_resolution_handler(
+            ctx,
+            computation_offset,
+            outcome_ciphertext,
+            resolver_pubkey,
+            nonce,
+        )
+    }
+
+    #[arcium_callback(encrypted_ix = "resolve_market")]
+    pub fn resolve_market_callback(
+        ctx: Context<ResolveMarketCallback>,
+        output: SignedComputationOutputs<ResolveMarketOutput>,
+    ) -> Result<()> {
+        instructions::resolve_market::resolve_market_callback_handler(ctx, output)
+    }
+
+    // ── Claim ───────────────────────────────────────────────────────────────
+    pub fn claim_payout(ctx: Context<ClaimPayout>, computation_offset: u64) -> Result<()> {
+        instructions::claim_payout::claim_payout_handler(ctx, computation_offset)
+    }
+
+    #[arcium_callback(encrypted_ix = "claim_payout")]
+    pub fn claim_payout_callback(
+        ctx: Context<ClaimPayoutCallback>,
+        output: SignedComputationOutputs<ClaimPayoutOutput>,
+    ) -> Result<()> {
+        instructions::claim_payout::claim_payout_callback_handler(ctx, output)
+    }
+
+    // ── CompDef inits ───────────────────────────────────────────────────────
     pub fn init_submit_position_comp_def(
         ctx: Context<InitSubmitPositionCompDef>,
     ) -> Result<()> {

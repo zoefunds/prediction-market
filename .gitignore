@@ -66,3 +66,7 @@ target/
 artifacts/
 test-ledger/
 **/*.so
+
+# Arcium build outputs
+build/
+artifacts/
