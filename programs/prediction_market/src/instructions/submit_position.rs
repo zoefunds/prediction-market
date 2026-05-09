@@ -130,7 +130,6 @@ pub fn submit_position_handler(
         .plaintext_u128(nonce)
         .encrypted_u8(slice_32(&position_ciphertext, 0))
         .encrypted_u64(slice_32(&position_ciphertext, 1))
-        .x25519_pubkey(totals_pubkey)
         .plaintext_u128(totals_nonce)
         .encrypted_u64(slice_32(&totals_ciphertext, 0))
         .encrypted_u64(slice_32(&totals_ciphertext, 1))

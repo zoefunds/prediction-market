@@ -11,15 +11,17 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Separator } from "@/components/ui/separator";
 import { getFirebase } from "@/lib/firebase/client";
 import type { Market } from "@/types";
+import { PositionDialog } from "@/components/markets/PositionDialog";
+import { DevnetNotice } from "@/components/markets/DevnetNotice";
 
 export default function MarketDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const [market, setMarket] = useState<Market | null>(null);
   const [loading, setLoading] = useState(true);
+  const [side, setSide] = useState<0 | 1 | null>(null);
 
   useEffect(() => {
     if (!params?.id) return;
@@ -64,14 +66,29 @@ export default function MarketDetailPage() {
             </CardContent>
           </Card>
         ) : (
-          <MarketView market={market} />
+          <>
+            <MarketView market={market} onPick={setSide} />
+            <PositionDialog
+              open={side !== null}
+              onOpenChange={(open) => !open && setSide(null)}
+              marketId={market.id}
+              marketQuestion={market.question || "Untitled market"}
+              outcome={side ?? 1}
+            />
+          </>
         )}
       </main>
     </>
   );
 }
 
-function MarketView({ market }: { market: Market }) {
+function MarketView({
+  market,
+  onPick,
+}: {
+  market: Market;
+  onPick: (side: 0 | 1) => void;
+}) {
   const closeMs = market.closeTs * 1000;
   const isOpen = market.status === "Open" && closeMs > Date.now();
   const closeLabel =
@@ -108,6 +125,7 @@ function MarketView({ market }: { market: Market }) {
         <p className="mt-2 text-xs text-muted-foreground">{closeLabel}</p>
       </div>
 
+      <DevnetNotice />
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Take a position</CardTitle>
@@ -118,6 +136,7 @@ function MarketView({ market }: { market: Market }) {
               <Button
                 size="lg"
                 className="bg-[color:var(--color-yes)] text-[color:var(--color-yes-fg)] hover:brightness-110"
+                onClick={() => onPick(1)}
               >
                 YES
               </Button>
@@ -125,6 +144,7 @@ function MarketView({ market }: { market: Market }) {
                 size="lg"
                 variant="outline"
                 className="border-[color:var(--color-no)]/50 text-[color:var(--color-no)] hover:bg-[color:var(--color-no)]/10"
+                onClick={() => onPick(0)}
               >
                 NO
               </Button>
@@ -136,7 +156,8 @@ function MarketView({ market }: { market: Market }) {
           )}
           <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
             <Lock className="h-3 w-3" />
-            Your stake and side are encrypted before submission.
+            Your stake and side are encrypted before submission. Settlement
+            happens in SOL on Solana.
           </p>
         </CardContent>
       </Card>
