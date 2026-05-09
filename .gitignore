@@ -70,3 +70,10 @@ test-ledger/
 # Arcium build outputs
 build/
 artifacts/
+
+# Indexer
+workers/indexer/.venv/
+workers/indexer/.env
+workers/indexer/__pycache__/
+workers/indexer/src/__pycache__/
+workers/indexer/*.pyc

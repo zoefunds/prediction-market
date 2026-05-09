@@ -28,7 +28,9 @@
     "clean": "pnpm -r --if-present run clean && rm -rf node_modules target",
     "fb:emulate": "cd backend && firebase emulators:start",
     "fb:deploy": "cd backend && firebase deploy --only functions,firestore",
-    "fb:rules": "cd backend && firebase deploy --only firestore:rules"
+    "fb:rules": "cd backend && firebase deploy --only firestore:rules",
+    "indexer:dev": "cd workers/indexer && source .venv/bin/activate && python -m src.main",
+    "indexer:install": "cd workers/indexer && python3.11 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt"
   },
   "devDependencies": {
     "@types/bn.js": "^5.1.0",

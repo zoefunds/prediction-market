@@ -1,0 +1,5 @@
+[project]
+name = "pm-indexer"
+version = "0.1.0"
+description = "Solana → Firestore event indexer for the Confidential Prediction Market"
+requires-python = ">=3.11"
