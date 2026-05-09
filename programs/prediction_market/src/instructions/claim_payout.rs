@@ -10,7 +10,6 @@ use crate::{
     ArciumSignerAccount, ID, ID_CONST,
 };
 
-// ── Queue ────────────────────────────────────────────────────────────────────
 #[queue_computation_accounts("claim_payout", payer)]
 #[derive(Accounts)]
 #[instruction(computation_offset: u64)]
@@ -50,9 +49,9 @@ pub struct ClaimPayout<'info> {
         bump,
         address = derive_sign_pda!(),
     )]
-    pub sign_pda_account: Account<'info, ArciumSignerAccount>,
+    pub sign_pda_account: Box<Account<'info, ArciumSignerAccount>>,
     #[account(address = derive_mxe_pda!())]
-    pub mxe_account: Account<'info, MXEAccount>,
+    pub mxe_account: Box<Account<'info, MXEAccount>>,
     #[account(mut, address = derive_mempool_pda!(mxe_account, ErrorCode::ClusterNotSet))]
     /// CHECK: arcium-checked.
     pub mempool_account: UncheckedAccount<'info>,
@@ -63,13 +62,13 @@ pub struct ClaimPayout<'info> {
     /// CHECK: arcium-checked.
     pub computation_account: UncheckedAccount<'info>,
     #[account(address = derive_comp_def_pda!(COMP_DEF_OFFSET_CLAIM_PAYOUT))]
-    pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+    pub comp_def_account: Box<Account<'info, ComputationDefinitionAccount>>,
     #[account(mut, address = derive_cluster_pda!(mxe_account, ErrorCode::ClusterNotSet))]
-    pub cluster_account: Account<'info, Cluster>,
+    pub cluster_account: Box<Account<'info, Cluster>>,
     #[account(mut, address = ARCIUM_FEE_POOL_ACCOUNT_ADDRESS)]
-    pub pool_account: Account<'info, FeePool>,
+    pub pool_account: Box<Account<'info, FeePool>>,
     #[account(mut, address = ARCIUM_CLOCK_ACCOUNT_ADDRESS)]
-    pub clock_account: Account<'info, ClockAccount>,
+    pub clock_account: Box<Account<'info, ClockAccount>>,
 
     pub system_program: Program<'info, System>,
     pub arcium_program: Program<'info, Arcium>,
@@ -84,7 +83,6 @@ pub fn claim_payout_handler(
 
     ctx.accounts.sign_pda_account.bump = ctx.bumps.sign_pda_account;
 
-    // claim_payout(user_position: Enc<Shared, UserPosition>, winning_outcome: u8) -> (bool, u64) revealed.
     let args = ArgBuilder::new()
         .x25519_pubkey(position.user_pubkey)
         .plaintext_u128(position.nonce)
@@ -109,26 +107,25 @@ pub fn claim_payout_handler(
             &ctx.accounts.mxe_account,
             &extra_accounts,
         )?],
-        2, // (bool, u64) revealed
+        2,
         0,
     )?;
 
     Ok(())
 }
 
-// ── Callback ────────────────────────────────────────────────────────────────
 #[callback_accounts("claim_payout")]
 #[derive(Accounts)]
 pub struct ClaimPayoutCallback<'info> {
     pub arcium_program: Program<'info, Arcium>,
     #[account(address = derive_comp_def_pda!(COMP_DEF_OFFSET_CLAIM_PAYOUT))]
-    pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+    pub comp_def_account: Box<Account<'info, ComputationDefinitionAccount>>,
     #[account(address = derive_mxe_pda!())]
-    pub mxe_account: Account<'info, MXEAccount>,
+    pub mxe_account: Box<Account<'info, MXEAccount>>,
     /// CHECK: arcium-checked.
     pub computation_account: UncheckedAccount<'info>,
     #[account(address = derive_cluster_pda!(mxe_account, ErrorCode::ClusterNotSet))]
-    pub cluster_account: Account<'info, Cluster>,
+    pub cluster_account: Box<Account<'info, Cluster>>,
     #[account(address = ::anchor_lang::solana_program::sysvar::instructions::ID)]
     /// CHECK: instructions sysvar.
     pub instructions_sysvar: AccountInfo<'info>,
@@ -160,7 +157,6 @@ pub fn claim_payout_callback_handler(
         Err(_) => return Err(ErrorCode::AbortedComputation.into()),
     };
 
-    // ClaimPayoutOutput { field_0: ClaimPayoutOutputStruct0 { field_0: bool, field_1: u64 } }
     let inner = &result.field_0;
     let won = inner.field_0;
     let amount = inner.field_1;
@@ -168,7 +164,6 @@ pub fn claim_payout_callback_handler(
     let market = &ctx.accounts.market;
     let position = &mut ctx.accounts.position;
 
-    // Compute payout in plaintext.
     let payout: u64 = if won {
         let total_pool = market
             .yes_pool
@@ -182,7 +177,6 @@ pub fn claim_payout_callback_handler(
         if winning_pool == 0 {
             0
         } else {
-            // amount * total_pool / winning_pool
             let scaled = (amount as u128)
                 .checked_mul(total_pool as u128)
                 .ok_or(ErrorCode::AbortedComputation)?;
@@ -194,14 +188,9 @@ pub fn claim_payout_callback_handler(
 
     position.claimed = true;
 
-    // Transfer payout from vault to recipient.
     if payout > 0 {
         let vault_lamports = **ctx.accounts.vault.lamports.borrow();
-        require!(
-            vault_lamports >= payout,
-            ErrorCode::InsufficientVaultBalance
-        );
-
+        require!(vault_lamports >= payout, ErrorCode::InsufficientVaultBalance);
         **ctx.accounts.vault.try_borrow_mut_lamports()? -= payout;
         **ctx.accounts.recipient.try_borrow_mut_lamports()? += payout;
     }

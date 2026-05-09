@@ -9,10 +9,11 @@ pub const MAX_QUESTION_LEN: usize = 200;
 pub const MAX_DESCRIPTION_LEN: usize = 1000;
 pub const MAX_CATEGORY_LEN: usize = 32;
 
-/// Computation-definition offsets.
-/// These are local-use sentinels. The Arcium macros derive the canonical
-/// on-chain offset from the circuit name, so the value here only needs to be
-/// distinct within this MXE. They are passed to `derive_comp_def_pda!()`.
-pub const COMP_DEF_OFFSET_SUBMIT_POSITION: u32 = 0xC0DE_0001;
-pub const COMP_DEF_OFFSET_RESOLVE_MARKET: u32 = 0xC0DE_0002;
-pub const COMP_DEF_OFFSET_CLAIM_PAYOUT: u32 = 0xC0DE_0003;
+/// Computation-definition offsets, derived at compile-time from the circuit
+/// name via SHA-256, matching the JS SDK's `getCompDefAccOffset()`.
+pub const COMP_DEF_OFFSET_SUBMIT_POSITION: u32 =
+    arcium_anchor::comp_def_offset("submit_position_v2");
+pub const COMP_DEF_OFFSET_RESOLVE_MARKET: u32 =
+    arcium_anchor::comp_def_offset("resolve_market");
+pub const COMP_DEF_OFFSET_CLAIM_PAYOUT: u32 =
+    arcium_anchor::comp_def_offset("claim_payout");

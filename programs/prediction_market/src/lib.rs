@@ -52,7 +52,7 @@ pub mod prediction_market {
 
     // ── Position submission (encrypted) ─────────────────────────────────────
     pub fn submit_position(
-        ctx: Context<SubmitPosition>,
+        ctx: Context<SubmitPositionV2>,
         computation_offset: u64,
         position_ciphertext: [u8; 64],
         user_pubkey: [u8; 32],
@@ -69,12 +69,12 @@ pub mod prediction_market {
         )
     }
 
-    #[arcium_callback(encrypted_ix = "submit_position")]
-    pub fn submit_position_callback(
-        ctx: Context<SubmitPositionCallback>,
-        output: SignedComputationOutputs<SubmitPositionOutput>,
+    #[arcium_callback(encrypted_ix = "submit_position_v2")]
+    pub fn submit_position_v2_callback(
+        ctx: Context<SubmitPositionV2Callback>,
+        output: SignedComputationOutputs<SubmitPositionV2Output>,
     ) -> Result<()> {
-        instructions::submit_position::submit_position_callback_handler(ctx, output)
+        instructions::submit_position::submit_position_v2_callback_handler(ctx, output)
     }
 
     // ── Resolution ──────────────────────────────────────────────────────────

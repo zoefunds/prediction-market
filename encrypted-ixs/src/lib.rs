@@ -15,17 +15,14 @@ mod circuits {
         total_positions: u32,
     }
 
-    pub struct UserPosition {
-        outcome: u8,
-        amount: u64,
-    }
-
-    /// Add a user's encrypted position to the market's encrypted totals.
+    /// Add encrypted position to market totals. Single output (Mxe-only) so the
+    /// callback fits in one Solana tx. The user keeps their plaintext locally
+    /// and re-supplies it for claim.
     #[instruction]
-    pub fn submit_position(
+    pub fn submit_position_v2(
         position_ctxt: Enc<Shared, PositionInput>,
         totals_ctxt: Enc<Mxe, MarketTotals>,
-    ) -> (Enc<Shared, UserPosition>, Enc<Mxe, MarketTotals>) {
+    ) -> Enc<Mxe, MarketTotals> {
         let pos = position_ctxt.to_arcis();
         let mut totals = totals_ctxt.to_arcis();
 
@@ -37,18 +34,9 @@ mod circuits {
         }
         totals.total_positions = totals.total_positions + 1u32;
 
-        let user_pos = UserPosition {
-            outcome: pos.outcome,
-            amount: pos.amount,
-        };
-
-        (
-            position_ctxt.owner.from_arcis(user_pos),
-            totals_ctxt.owner.from_arcis(totals),
-        )
+        totals_ctxt.owner.from_arcis(totals)
     }
 
-    /// Reveal the resolution: which side won, and the two pool totals.
     #[instruction]
     pub fn resolve_market(
         outcome_ctxt: Enc<Shared, u8>,
@@ -56,16 +44,12 @@ mod circuits {
     ) -> (u8, u64, u64) {
         let outcome = outcome_ctxt.to_arcis();
         let totals = totals_ctxt.to_arcis();
-
         (outcome, totals.yes_pool, totals.no_pool).reveal()
     }
 
-    /// Reveal whether this user won and their staked amount.
-    /// Payout math is done on-chain in plaintext (cheap u64 ops).
-    /// This circuit is small (no division, no big multiplication).
     #[instruction]
     pub fn claim_payout(
-        user_position_ctxt: Enc<Shared, UserPosition>,
+        user_position_ctxt: Enc<Shared, PositionInput>,
         winning_outcome: u8,
     ) -> (bool, u64) {
         let pos = user_position_ctxt.to_arcis();

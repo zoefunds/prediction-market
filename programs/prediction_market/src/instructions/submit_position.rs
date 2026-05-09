@@ -11,10 +11,10 @@ use crate::{
     ArciumSignerAccount, ID, ID_CONST,
 };
 
-#[queue_computation_accounts("submit_position", payer)]
+#[queue_computation_accounts("submit_position_v2", payer)]
 #[derive(Accounts)]
 #[instruction(computation_offset: u64)]
-pub struct SubmitPosition<'info> {
+pub struct SubmitPositionV2<'info> {
     #[account(mut)]
     pub payer: Signer<'info>,
 
@@ -50,9 +50,9 @@ pub struct SubmitPosition<'info> {
         bump,
         address = derive_sign_pda!(),
     )]
-    pub sign_pda_account: Account<'info, ArciumSignerAccount>,
+    pub sign_pda_account: Box<Account<'info, ArciumSignerAccount>>,
     #[account(address = derive_mxe_pda!())]
-    pub mxe_account: Account<'info, MXEAccount>,
+    pub mxe_account: Box<Account<'info, MXEAccount>>,
     #[account(mut, address = derive_mempool_pda!(mxe_account, ErrorCode::ClusterNotSet))]
     /// CHECK: arcium-checked.
     pub mempool_account: UncheckedAccount<'info>,
@@ -63,20 +63,20 @@ pub struct SubmitPosition<'info> {
     /// CHECK: arcium-checked.
     pub computation_account: UncheckedAccount<'info>,
     #[account(address = derive_comp_def_pda!(COMP_DEF_OFFSET_SUBMIT_POSITION))]
-    pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+    pub comp_def_account: Box<Account<'info, ComputationDefinitionAccount>>,
     #[account(mut, address = derive_cluster_pda!(mxe_account, ErrorCode::ClusterNotSet))]
-    pub cluster_account: Account<'info, Cluster>,
+    pub cluster_account: Box<Account<'info, Cluster>>,
     #[account(mut, address = ARCIUM_FEE_POOL_ACCOUNT_ADDRESS)]
-    pub pool_account: Account<'info, FeePool>,
+    pub pool_account: Box<Account<'info, FeePool>>,
     #[account(mut, address = ARCIUM_CLOCK_ACCOUNT_ADDRESS)]
-    pub clock_account: Account<'info, ClockAccount>,
+    pub clock_account: Box<Account<'info, ClockAccount>>,
 
     pub system_program: Program<'info, System>,
     pub arcium_program: Program<'info, Arcium>,
 }
 
 pub fn submit_position_handler(
-    ctx: Context<SubmitPosition>,
+    ctx: Context<SubmitPositionV2>,
     computation_offset: u64,
     position_ciphertext: [u8; 64],
     user_pubkey: [u8; 32],
@@ -85,30 +85,24 @@ pub fn submit_position_handler(
 ) -> Result<()> {
     let now = Clock::get()?.unix_timestamp;
 
-    // ── Validate (immutable read) ─────────────────────────────────────────────
     require!(
         ctx.accounts.market.status == MarketStatus::Open,
         ErrorCode::MarketNotOpen
     );
-    require!(
-        now < ctx.accounts.market.close_ts,
-        ErrorCode::MarketNotOpen
-    );
+    require!(now < ctx.accounts.market.close_ts, ErrorCode::MarketNotOpen);
     require!(stake_amount > 0, ErrorCode::ZeroStake);
 
-    // Snapshot what we'll need from market AFTER the mutable borrow ends.
     let market_key = ctx.accounts.market.key();
     let market_total_positions_now = ctx.accounts.market.total_positions;
     let totals_pubkey = ctx.accounts.market.totals_pubkey;
     let totals_nonce = ctx.accounts.market.totals_nonce;
     let totals_ciphertext = ctx.accounts.market.totals_ciphertext;
 
-    // ── Mutate Position ───────────────────────────────────────────────────────
     {
         let position = &mut ctx.accounts.position;
         position.market = market_key;
         position.user = ctx.accounts.payer.key();
-        position.ciphertext = [0u8; 64];
+        position.ciphertext = position_ciphertext;
         position.user_pubkey = user_pubkey;
         position.nonce = nonce;
         position.stake_amount = stake_amount;
@@ -118,7 +112,6 @@ pub fn submit_position_handler(
     }
     let position_key = ctx.accounts.position.key();
 
-    // ── Stake transfer to vault ───────────────────────────────────────────────
     system_program::transfer(
         CpiContext::new(
             ctx.accounts.system_program.to_account_info(),
@@ -153,12 +146,12 @@ pub fn submit_position_handler(
         ctx.accounts,
         computation_offset,
         args,
-        vec![SubmitPositionCallback::callback_ix(
+        vec![SubmitPositionV2Callback::callback_ix(
             computation_offset,
             &ctx.accounts.mxe_account,
             &extra_accounts,
         )?],
-        2,
+        1,
         0,
     )?;
 
@@ -173,18 +166,18 @@ pub fn submit_position_handler(
     Ok(())
 }
 
-#[callback_accounts("submit_position")]
+#[callback_accounts("submit_position_v2")]
 #[derive(Accounts)]
-pub struct SubmitPositionCallback<'info> {
+pub struct SubmitPositionV2Callback<'info> {
     pub arcium_program: Program<'info, Arcium>,
     #[account(address = derive_comp_def_pda!(COMP_DEF_OFFSET_SUBMIT_POSITION))]
-    pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+    pub comp_def_account: Box<Account<'info, ComputationDefinitionAccount>>,
     #[account(address = derive_mxe_pda!())]
-    pub mxe_account: Account<'info, MXEAccount>,
+    pub mxe_account: Box<Account<'info, MXEAccount>>,
     /// CHECK: arcium-checked.
     pub computation_account: UncheckedAccount<'info>,
     #[account(address = derive_cluster_pda!(mxe_account, ErrorCode::ClusterNotSet))]
-    pub cluster_account: Account<'info, Cluster>,
+    pub cluster_account: Box<Account<'info, Cluster>>,
     #[account(address = ::anchor_lang::solana_program::sysvar::instructions::ID)]
     /// CHECK: instructions sysvar.
     pub instructions_sysvar: AccountInfo<'info>,
@@ -196,9 +189,9 @@ pub struct SubmitPositionCallback<'info> {
     pub position: Box<Account<'info, Position>>,
 }
 
-pub fn submit_position_callback_handler(
-    ctx: Context<SubmitPositionCallback>,
-    output: SignedComputationOutputs<SubmitPositionOutput>,
+pub fn submit_position_v2_callback_handler(
+    ctx: Context<SubmitPositionV2Callback>,
+    output: SignedComputationOutputs<SubmitPositionV2Output>,
 ) -> Result<()> {
     let outputs = match output.verify_output(
         &ctx.accounts.cluster_account,
@@ -208,16 +201,8 @@ pub fn submit_position_callback_handler(
         Err(_) => return Err(ErrorCode::AbortedComputation.into()),
     };
 
-    // SubmitPositionOutput { field_0: SubmitPositionOutputStruct0 { field_0: Enc<Shared,UserPosition>, field_1: Enc<Mxe,MarketTotals> } }
-    let user_receipt = &outputs.field_0.field_0;
-    let new_totals = &outputs.field_0.field_1;
-
-    let position = &mut ctx.accounts.position;
-    let mut packed = [0u8; 64];
-    packed[..32].copy_from_slice(&user_receipt.ciphertexts[0]);
-    packed[32..].copy_from_slice(&user_receipt.ciphertexts[1]);
-    position.ciphertext = packed;
-    position.nonce = user_receipt.nonce;
+    // Single output: Enc<Mxe, MarketTotals> — 3 ciphertext elements
+    let new_totals = &outputs.field_0;
 
     let market = &mut ctx.accounts.market;
     let mut totals_packed = [0u8; 96];
@@ -233,7 +218,6 @@ pub fn submit_position_callback_handler(
 
     Ok(())
 }
-
 fn slice_32(blob: &[u8], idx: usize) -> [u8; 32] {
     let mut out = [0u8; 32];
     let start = idx * 32;

@@ -6,7 +6,7 @@ use crate::ID;
 // ─────────────────────────────────────────────────────────────────────────────
 // submit_position
 // ─────────────────────────────────────────────────────────────────────────────
-#[init_computation_definition_accounts("submit_position", payer)]
+#[init_computation_definition_accounts("submit_position_v2", payer)]
 #[derive(Accounts)]
 pub struct InitSubmitPositionCompDef<'info> {
     #[account(mut)]
