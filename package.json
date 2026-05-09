@@ -25,7 +25,10 @@
     "arcium:build": "arcium build",
     "lint": "pnpm -r --if-present run lint",
     "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
-    "clean": "pnpm -r --if-present run clean && rm -rf node_modules target"
+    "clean": "pnpm -r --if-present run clean && rm -rf node_modules target",
+    "fb:emulate": "cd backend && firebase emulators:start",
+    "fb:deploy": "cd backend && firebase deploy --only functions,firestore",
+    "fb:rules": "cd backend && firebase deploy --only firestore:rules"
   },
   "devDependencies": {
     "@types/bn.js": "^5.1.0",
