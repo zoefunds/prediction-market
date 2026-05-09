@@ -12,13 +12,13 @@ from typing import Any, Dict, List, Optional
 from .config import Config, load_config
 from .decoder import EventDecoder
 from .firestore_client import init_firestore, upsert_market, write_event
+from .market_account import decode_market_account
 from .rpc_client import RpcClient
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
-# Quiet noisy http logger
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
@@ -26,7 +26,6 @@ log = logging.getLogger("indexer")
 
 
 def _normalize(raw: Dict[str, Any]) -> Dict[str, Any]:
-    """Firestore can't store ints > 2^53. Stringify big numerics."""
     out: Dict[str, Any] = {}
     for k, v in raw.items():
         if isinstance(v, int) and (v > 2**53 - 1 or v < -(2**53 - 1)):
@@ -49,7 +48,6 @@ class Indexer:
         if not idl_path.exists():
             raise FileNotFoundError(f"IDL not found: {idl_path}")
         self.decoder = EventDecoder(idl_path)
-        # Map market PDA → market id (u64). Populated from MarketCreated events.
         self._pda_to_id: Dict[str, str] = {}
         self._hydrate_pda_map()
         log.info(
@@ -59,7 +57,6 @@ class Indexer:
         )
 
     def _hydrate_pda_map(self) -> None:
-        """Pre-load known market PDAs from existing Firestore docs."""
         for snap in self.db.collection("markets").stream():
             d = snap.to_dict() or {}
             pda = d.get("marketPda")
@@ -68,6 +65,28 @@ class Indexer:
 
     async def close(self) -> None:
         await self.rpc.close()
+
+    async def _enrich_from_chain(self, market_pda: str) -> Dict[str, Any]:
+        """Pull the on-chain market account and return the rich UI fields."""
+        raw = await self.rpc.get_account_data(market_pda)
+        if not raw:
+            return {}
+        m = decode_market_account(raw)
+        if not m:
+            return {}
+        return {
+            "question": m.question,
+            "description": m.description,
+            "category": m.category or "general",
+            "resolver": m.resolver,
+            "closeTs": m.close_ts,
+            "resolvedTs": m.resolved_ts,
+            "status": m.status,
+            "winningOutcome": m.winning_outcome,
+            "yesPool": m.yes_pool,
+            "noPool": m.no_pool,
+            "totalPositions": m.total_positions,
+        }
 
     async def process_tx_logs(
         self,
@@ -100,20 +119,19 @@ class Indexer:
             )
             if inserted:
                 n += 1
-                self._mirror_event(decoded["name"], payload, slot, block_time)
+                await self._mirror_event(decoded["name"], payload, slot, block_time)
             idx += 1
         return n
 
     def _extract_market_id(self, event_name: str, payload: Dict[str, Any]) -> Optional[str]:
         if event_name == "MarketCreated":
             return str(payload.get("id"))
-        # Other events identify market by PDA only.
         pda = payload.get("market")
         if pda and pda in self._pda_to_id:
             return self._pda_to_id[pda]
         return None
 
-    def _mirror_event(
+    async def _mirror_event(
         self,
         name: str,
         payload: Dict[str, Any],
@@ -125,21 +143,20 @@ class Indexer:
             pda = payload.get("market")
             if pda:
                 self._pda_to_id[pda] = mid
-            upsert_market(
-                self.db,
-                mid,
-                {
-                    "id": mid,
-                    "creator": payload.get("creator"),
-                    "marketPda": pda,
-                    "closeTs": int(payload.get("close_ts") or 0),
-                    "status": "Open",
-                    "totalPositions": 0,
-                },
-            )
+            base = {
+                "id": mid,
+                "creator": payload.get("creator"),
+                "marketPda": pda,
+                "closeTs": int(payload.get("close_ts") or 0),
+                "status": "Open",
+                "totalPositions": 0,
+            }
+            # Enrich with on-chain question/description/category.
+            if pda:
+                base.update(await self._enrich_from_chain(pda))
+            upsert_market(self.db, mid, base)
             return
 
-        # Look up the market id from the cache.
         pda = payload.get("market")
         if not pda:
             return
@@ -151,9 +168,7 @@ class Indexer:
             upsert_market(
                 self.db,
                 mid,
-                {
-                    "totalPositions": payload.get("total_positions"),
-                },
+                {"totalPositions": payload.get("total_positions")},
             )
         elif name == "MarketResolutionRequested":
             upsert_market(self.db, mid, {"status": "AwaitingResolution"})
@@ -171,9 +186,6 @@ class Indexer:
                     "resolvedTs": payload.get("timestamp"),
                 },
             )
-        elif name == "PayoutClaimed":
-            # Payouts don't change market state directly; just emit the event.
-            pass
 
     async def backfill(self, max_pages: int = 5) -> None:
         log.info("backfill starting…")

@@ -1,10 +1,4 @@
-"""Minimal Solana RPC client for our indexer needs.
-
-We only need:
-  - logsSubscribe (websocket) for live tail
-  - getSignaturesForAddress (HTTP) for backfill
-  - getTransaction (HTTP) to fetch logs for a sig
-"""
+"""Minimal Solana RPC client for our indexer needs."""
 from __future__ import annotations
 
 import asyncio
@@ -14,6 +8,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Dict, List, Optional
 
+import base64
 import httpx
 import websockets
 
@@ -38,7 +33,6 @@ class RpcClient:
     async def close(self) -> None:
         await self._http.aclose()
 
-    # ── HTTP ─────────────────────────────────────────────────────────────
     async def _http_call(self, method: str, params: List[Any]) -> Any:
         body = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
         r = await self._http.post(self._http_url, json=body)
@@ -67,7 +61,24 @@ class RpcClient:
             log.warning("get_transaction(%s): %s", sig, e)
             return None
 
-    # ── WS ───────────────────────────────────────────────────────────────
+    async def get_account_data(self, address: str) -> Optional[bytes]:
+        """Return raw account data bytes, or None if not found."""
+        params: List[Any] = [
+            address,
+            {"encoding": "base64", "commitment": "confirmed"},
+        ]
+        try:
+            res = await self._http_call("getAccountInfo", params)
+        except RuntimeError as e:
+            log.warning("get_account_data(%s): %s", address, e)
+            return None
+        if not res or not res.get("value"):
+            return None
+        data = res["value"].get("data")
+        if not data or not isinstance(data, list):
+            return None
+        return base64.b64decode(data[0])
+
     @asynccontextmanager
     async def logs_subscribe(self, address: str) -> AsyncIterator["asyncio.Queue[TxLogs]"]:
         queue: asyncio.Queue[TxLogs] = asyncio.Queue(maxsize=1024)
@@ -106,7 +117,7 @@ class RpcClient:
                             tx = TxLogs(
                                 signature=value.get("signature", ""),
                                 slot=ctx.get("slot", 0),
-                                block_time=0,  # not in WS payload; fetched lazily if needed
+                                block_time=0,
                                 err=value.get("err"),
                                 logs=value.get("logs") or [],
                             )

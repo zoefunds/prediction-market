@@ -1,0 +1,34 @@
+/* Override the wallet-adapter-react-ui default button to fit our theme */
+.wallet-adapter-button-trigger {
+  background: var(--primary) !important;
+  color: var(--primary-foreground) !important;
+  border-radius: var(--radius) !important;
+  font-family: inherit !important;
+  font-size: 0.875rem !important;
+  font-weight: 600 !important;
+  height: 38px !important;
+  padding: 0 16px !important;
+  transition: filter 0.2s ease;
+}
+
+.wallet-adapter-button-trigger:hover,
+.wallet-adapter-button-trigger:not([disabled]):hover {
+  background: var(--primary) !important;
+  filter: brightness(1.08);
+}
+
+.wallet-adapter-modal-wrapper {
+  background: var(--popover) !important;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.wallet-adapter-modal-title {
+  color: var(--popover-foreground) !important;
+}
+.wallet-adapter-modal-list .wallet-adapter-button {
+  background: var(--secondary) !important;
+  color: var(--secondary-foreground) !important;
+}
+.wallet-adapter-modal-list .wallet-adapter-button:hover {
+  background: var(--accent) !important;
+}
