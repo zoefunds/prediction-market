@@ -1,65 +1,32 @@
 rules_version = '2';
 
-// Confidential Prediction Market — Firestore rules
-//
-// Auth model:
-//   - All writes go through Cloud Functions (service account, bypasses rules).
-//   - Public reads on markets, events, leaderboard.
-//   - Users can read/update their own user doc.
-//
-// IMPORTANT: never trust client writes. The on-chain Solana program is the
-// source of truth. Firestore is a cache. Most direct client writes are
-// blocked here; use Cloud Functions instead.
-
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Helpers
-    function isSignedIn() {
-      return request.auth != null;
-    }
-    function isOwner(uid) {
-      return isSignedIn() && request.auth.uid == uid;
-    }
-    function adminUid() {
-      // Replace with your Firebase Auth UID once you create an admin user
-      return request.auth != null && request.auth.token.admin == true;
-    }
-
-    // ── markets/* (public read; writes via Functions only) ──
+    // Markets: anyone can read; only Functions/server (using Admin SDK)
+    // can write. The Admin SDK bypasses rules entirely.
     match /markets/{marketId} {
-      allow read: if true;
-      allow write: if false;  // server-only via admin SDK
-    }
-
-    // ── events/* (append-only; client read for transparency) ──
-    match /events/{eventId} {
-      allow read: if true;
-      allow write: if false;  // indexer only
-    }
-
-    // ── leaderboard/* (public read; computed by function) ──
-    match /leaderboard/{uid} {
       allow read: if true;
       allow write: if false;
     }
 
-    // ── users/{uid} (read public, edit-own only restricted fields) ──
-    match /users/{uid} {
+    // Events: same as markets — public read, server-only write.
+    match /events/{eventId} {
       allow read: if true;
-      allow create: if isOwner(uid)
-                    && request.resource.data.keys().hasOnly(
-                         ['uid','displayName','photoURL','walletAddress','joinedAt']
-                       );
-      allow update: if isOwner(uid)
-                    && request.resource.data.diff(resource.data).affectedKeys()
-                         .hasOnly(['displayName','photoURL','walletAddress']);
+      allow write: if false;
+    }
+
+    // Users: signed-in users can read/write only their own doc.
+    match /users/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create: if request.auth != null && request.auth.uid == uid;
+      allow update: if request.auth != null && request.auth.uid == uid;
       allow delete: if false;
     }
 
-    // ── userPrivate/{uid}/_/{key} (truly private, owner only) ──
-    match /userPrivate/{uid}/{document=**} {
-      allow read, write: if isOwner(uid);
+    // Leaderboard: anyone can read (it's the whole point); only server writes.
+    match /leaderboard/{wallet} {
+      allow read: if true;
+      allow write: if false;
     }
   }
 }

@@ -4,10 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build --turbopack",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "dev:turbo": "next dev --turbopack"
+    "dev:turbo": "next dev --turbopack",
+    "build:turbo": "next build --turbopack"
   },
   "dependencies": {
     "@arcium-hq/client": "0.9.7",
