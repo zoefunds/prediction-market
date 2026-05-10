@@ -16,9 +16,24 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Confidential Prediction Market",
+  title: "CipherMarket",
   description:
-    "Trade on outcomes — privately. Encrypted positions, settled on Solana via Arcium MPC.",
+    "Trade on outcomes privately. Encrypted positions, settled on Solana via Arcium MPC.",
+  icons: { icon: "/brand/logo.svg" },
+  openGraph: {
+    title: "CipherMarket",
+    description: "Confidential prediction markets on Solana with Arcium MPC.",
+    url: "https://cipher-market-six.vercel.app",
+    siteName: "CipherMarket",
+    images: [{ url: "/brand/logo.svg", width: 500, height: 500 }],
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "CipherMarket",
+    description: "Confidential prediction markets on Solana with Arcium MPC.",
+    images: ["/brand/logo.svg"],
+  },
 };
 
 export default function RootLayout({
