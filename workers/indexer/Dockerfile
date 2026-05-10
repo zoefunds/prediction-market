@@ -8,9 +8,11 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 COPY src ./src
 COPY idl ./idl
+COPY docker-entrypoint.sh .
+RUN chmod +x docker-entrypoint.sh
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV IDL_PATH=/app/idl/prediction_market.json
 
-CMD ["python", "-m", "src.main"]
+CMD ["./docker-entrypoint.sh"]
