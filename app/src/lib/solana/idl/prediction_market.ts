@@ -14,6 +14,41 @@ export type PredictionMarket = {
   },
   "instructions": [
     {
+      "name": "cancelMarket",
+      "discriminator": [
+        205,
+        121,
+        84,
+        210,
+        222,
+        71,
+        150,
+        11
+      ],
+      "accounts": [
+        {
+          "name": "creator",
+          "docs": [
+            "The market creator (only they can cancel an open market)."
+          ],
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "market"
+          ]
+        },
+        {
+          "name": "market",
+          "docs": [
+            "The market being cancelled. Must be in Open status, must be owned",
+            "by `creator`."
+          ],
+          "writable": true
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "claimPayout",
       "discriminator": [
         127,
@@ -1061,6 +1096,98 @@ export type PredictionMarket = {
           }
         }
       ]
+    },
+    {
+      "name": "withdrawPosition",
+      "discriminator": [
+        254,
+        30,
+        169,
+        94,
+        33,
+        171,
+        39,
+        104
+      ],
+      "accounts": [
+        {
+          "name": "user",
+          "docs": [
+            "The position holder."
+          ],
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "position"
+          ]
+        },
+        {
+          "name": "market",
+          "docs": [
+            "The market the position belongs to. Must be Cancelled."
+          ],
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "position",
+          "docs": [
+            "The user's position on this market. Closed on success; rent → user."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  115,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
     }
   ],
   "accounts": [
@@ -1184,6 +1311,19 @@ export type PredictionMarket = {
   ],
   "events": [
     {
+      "name": "marketCancelled",
+      "discriminator": [
+        139,
+        163,
+        33,
+        168,
+        19,
+        180,
+        81,
+        170
+      ]
+    },
+    {
       "name": "marketCreated",
       "discriminator": [
         88,
@@ -1246,6 +1386,19 @@ export type PredictionMarket = {
         249,
         245,
         64
+      ]
+    },
+    {
+      "name": "positionWithdrawn",
+      "discriminator": [
+        207,
+        105,
+        38,
+        76,
+        190,
+        32,
+        8,
+        81
       ]
     }
   ],
@@ -1324,6 +1477,31 @@ export type PredictionMarket = {
       "code": 6014,
       "name": "insufficientVaultBalance",
       "msg": "Insufficient vault balance for payout"
+    },
+    {
+      "code": 6015,
+      "name": "unauthorized",
+      "msg": "Caller is not authorized for this operation"
+    },
+    {
+      "code": 6016,
+      "name": "marketNotCancelled",
+      "msg": "Market is not in Cancelled status"
+    },
+    {
+      "code": 6017,
+      "name": "vaultUnderfunded",
+      "msg": "Vault does not have enough balance to refund"
+    },
+    {
+      "code": 6018,
+      "name": "arithmeticOverflow",
+      "msg": "Arithmetic overflow"
+    },
+    {
+      "code": 6019,
+      "name": "invalidStake",
+      "msg": "Stake amount must be greater than zero"
     }
   ],
   "types": [
@@ -2027,6 +2205,30 @@ export type PredictionMarket = {
       }
     },
     {
+      "name": "marketCancelled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "creator",
+            "type": "pubkey"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          },
+          {
+            "name": "totalPositions",
+            "type": "u32"
+          }
+        ]
+      }
+    },
+    {
       "name": "marketCreated",
       "type": {
         "kind": "struct",
@@ -2469,6 +2671,30 @@ export type PredictionMarket = {
           {
             "name": "totalPositions",
             "type": "u32"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "positionWithdrawn",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
           },
           {
             "name": "timestamp",

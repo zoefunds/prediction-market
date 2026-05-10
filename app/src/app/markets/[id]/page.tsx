@@ -14,7 +14,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { getFirebase } from "@/lib/firebase/client";
 import type { Market } from "@/types";
 import { PositionDialog } from "@/components/markets/PositionDialog";
-import { DevnetNotice } from "@/components/markets/DevnetNotice";
+import { CancelMarketButton } from "@/components/markets/CancelMarketButton";
+
 
 export default function MarketDetailPage() {
   const params = useParams<{ id: string }>();
@@ -118,6 +119,9 @@ function MarketView({
           <span className="text-xs text-muted-foreground">
             Market #{market.id}
           </span>
+          {market.creator ? (
+            <CancelMarketButton marketId={market.id} creator={market.creator} status={market.status} />
+          ) : null}
         </div>
         <h1 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
           {market.question || "Untitled market"}
@@ -125,7 +129,6 @@ function MarketView({
         <p className="mt-2 text-xs text-muted-foreground">{closeLabel}</p>
       </div>
 
-      <DevnetNotice />
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Take a position</CardTitle>

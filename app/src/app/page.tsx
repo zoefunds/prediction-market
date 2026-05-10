@@ -74,7 +74,7 @@ function Hero() {
           <Lock className="h-3 w-3" /> Encrypted positions
         </Badge>
         <h1 className="max-w-3xl text-3xl font-semibold tracking-tight sm:text-4xl">
-          Trade on outcomes — privately.
+          Trade on outcomes privately.
         </h1>
         <p className="mt-3 max-w-2xl text-base text-muted-foreground">
           Your prediction stays encrypted on-chain via Arcium MPC. The market

@@ -14,13 +14,15 @@ import type { Market, MarketStatus } from "@/types";
 function coerceDate(v: unknown): Date | undefined {
   if (!v) return undefined;
   if (v instanceof Date) return v;
-  // Firestore Timestamp duck-type
   const t = v as Timestamp;
   if (typeof t?.toDate === "function") return t.toDate();
   return undefined;
 }
 
-export function useMarkets(opts?: { status?: MarketStatus }) {
+export function useMarkets(opts?: {
+  status?: MarketStatus;
+  includeHidden?: boolean;
+}) {
   const [data, setData] = useState<Market[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -28,7 +30,6 @@ export function useMarkets(opts?: { status?: MarketStatus }) {
   useEffect(() => {
     const { db } = getFirebase();
     const ref = collection(db, "markets");
-    // Order by createdAt desc — newest first.
     const q = query(ref, orderBy("createdAt", "desc"));
     const unsub = onSnapshot(
       q,
@@ -42,11 +43,14 @@ export function useMarkets(opts?: { status?: MarketStatus }) {
             updatedAt: coerceDate(data.updatedAt),
           };
         });
-        setData(
-          opts?.status
-            ? markets.filter((m) => m.status === opts.status)
-            : markets,
-        );
+        const filtered = markets.filter((m) => {
+          if (!opts?.includeHidden && (m as Market & { hidden?: boolean }).hidden) {
+            return false;
+          }
+          if (opts?.status && m.status !== opts.status) return false;
+          return true;
+        });
+        setData(filtered);
         setLoading(false);
       },
       (err) => {
@@ -55,7 +59,7 @@ export function useMarkets(opts?: { status?: MarketStatus }) {
       },
     );
     return () => unsub();
-  }, [opts?.status]);
+  }, [opts?.status, opts?.includeHidden]);
 
   return { data, loading, error };
 }

@@ -1,14 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// Wallet button is wallet-adapter-react-ui's modal button — its CSS doesn't ship
-// SSR-friendly, so we load it client-only.
 const WalletMultiButton = dynamic(
   async () =>
     (await import("@solana/wallet-adapter-react-ui")).WalletMultiButton,
@@ -29,21 +26,21 @@ export function TopNav() {
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border/60 bg-background/85 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-6 px-4 sm:px-6">
-        <Link href="/" className="flex items-center gap-2">
+        <a href="/" className="flex items-center gap-2">
           <span className="grid h-8 w-8 place-items-center rounded-md bg-primary text-primary-foreground font-bold">
             cφ
           </span>
           <span className="hidden text-base font-semibold tracking-tight sm:inline">
             CipherMarket
           </span>
-        </Link>
+        </a>
 
         <nav className="hidden md:flex items-center gap-1 text-sm">
           {NAV.map((n) => {
             const active =
               n.href === "/" ? pathname === "/" : pathname.startsWith(n.href);
             return (
-              <Link
+              <a
                 key={n.href}
                 href={n.href}
                 className={cn(
@@ -54,7 +51,7 @@ export function TopNav() {
                 )}
               >
                 {n.label}
-              </Link>
+              </a>
             );
           })}
         </nav>
@@ -68,8 +65,6 @@ export function TopNav() {
               className="flex-1 bg-transparent outline-none placeholder:text-muted-foreground/70"
             />
           </div>
-
-          {/* wallet adapter renders its own styled button; we just give it room */}
           <div className="cm-wallet-shell">
             {mounted ? <WalletMultiButton /> : null}
           </div>

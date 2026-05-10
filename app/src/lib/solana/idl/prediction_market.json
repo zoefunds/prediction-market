@@ -8,6 +8,41 @@
   },
   "instructions": [
     {
+      "name": "cancel_market",
+      "discriminator": [
+        205,
+        121,
+        84,
+        210,
+        222,
+        71,
+        150,
+        11
+      ],
+      "accounts": [
+        {
+          "name": "creator",
+          "docs": [
+            "The market creator (only they can cancel an open market)."
+          ],
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "market"
+          ]
+        },
+        {
+          "name": "market",
+          "docs": [
+            "The market being cancelled. Must be in Open status, must be owned",
+            "by `creator`."
+          ],
+          "writable": true
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "claim_payout",
       "discriminator": [
         127,
@@ -1055,6 +1090,98 @@
           }
         }
       ]
+    },
+    {
+      "name": "withdraw_position",
+      "discriminator": [
+        254,
+        30,
+        169,
+        94,
+        33,
+        171,
+        39,
+        104
+      ],
+      "accounts": [
+        {
+          "name": "user",
+          "docs": [
+            "The position holder."
+          ],
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "position"
+          ]
+        },
+        {
+          "name": "market",
+          "docs": [
+            "The market the position belongs to. Must be Cancelled."
+          ],
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "position",
+          "docs": [
+            "The user's position on this market. Closed on success; rent → user."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  115,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
     }
   ],
   "accounts": [
@@ -1178,6 +1305,19 @@
   ],
   "events": [
     {
+      "name": "MarketCancelled",
+      "discriminator": [
+        139,
+        163,
+        33,
+        168,
+        19,
+        180,
+        81,
+        170
+      ]
+    },
+    {
       "name": "MarketCreated",
       "discriminator": [
         88,
@@ -1240,6 +1380,19 @@
         249,
         245,
         64
+      ]
+    },
+    {
+      "name": "PositionWithdrawn",
+      "discriminator": [
+        207,
+        105,
+        38,
+        76,
+        190,
+        32,
+        8,
+        81
       ]
     }
   ],
@@ -1318,6 +1471,31 @@
       "code": 6014,
       "name": "InsufficientVaultBalance",
       "msg": "Insufficient vault balance for payout"
+    },
+    {
+      "code": 6015,
+      "name": "Unauthorized",
+      "msg": "Caller is not authorized for this operation"
+    },
+    {
+      "code": 6016,
+      "name": "MarketNotCancelled",
+      "msg": "Market is not in Cancelled status"
+    },
+    {
+      "code": 6017,
+      "name": "VaultUnderfunded",
+      "msg": "Vault does not have enough balance to refund"
+    },
+    {
+      "code": 6018,
+      "name": "ArithmeticOverflow",
+      "msg": "Arithmetic overflow"
+    },
+    {
+      "code": 6019,
+      "name": "InvalidStake",
+      "msg": "Stake amount must be greater than zero"
     }
   ],
   "types": [
@@ -2021,6 +2199,30 @@
       }
     },
     {
+      "name": "MarketCancelled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "creator",
+            "type": "pubkey"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          },
+          {
+            "name": "total_positions",
+            "type": "u32"
+          }
+        ]
+      }
+    },
+    {
       "name": "MarketCreated",
       "type": {
         "kind": "struct",
@@ -2463,6 +2665,30 @@
           {
             "name": "total_positions",
             "type": "u32"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PositionWithdrawn",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
           },
           {
             "name": "timestamp",

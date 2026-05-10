@@ -50,6 +50,9 @@ class Indexer:
         self.decoder = EventDecoder(idl_path)
         self._pda_to_id: Dict[str, str] = {}
         self._hydrate_pda_map()
+        # Toggle: True during backfill, False during tail. Backfilled markets
+        # are hidden from the dashboard by default; live tail markets aren't.
+        self._hide_new_markets: bool = False
         log.info(
             "indexer ready: program=%s rpc=%s",
             cfg.program_id,
@@ -67,7 +70,6 @@ class Indexer:
         await self.rpc.close()
 
     async def _enrich_from_chain(self, market_pda: str) -> Dict[str, Any]:
-        """Pull the on-chain market account and return the rich UI fields."""
         raw = await self.rpc.get_account_data(market_pda)
         if not raw:
             return {}
@@ -143,7 +145,7 @@ class Indexer:
             pda = payload.get("market")
             if pda:
                 self._pda_to_id[pda] = mid
-            base = {
+            base: Dict[str, Any] = {
                 "id": mid,
                 "creator": payload.get("creator"),
                 "marketPda": pda,
@@ -151,7 +153,8 @@ class Indexer:
                 "status": "Open",
                 "totalPositions": 0,
             }
-            # Enrich with on-chain question/description/category.
+            if self._hide_new_markets:
+                base["hidden"] = True
             if pda:
                 base.update(await self._enrich_from_chain(pda))
             upsert_market(self.db, mid, base)
@@ -186,37 +189,53 @@ class Indexer:
                     "resolvedTs": payload.get("timestamp"),
                 },
             )
+        elif name == "MarketCancelled":
+            upsert_market(
+                self.db,
+                mid,
+                {
+                    "status": "Cancelled",
+                    "resolvedTs": payload.get("timestamp"),
+                },
+            )
+        elif name == "PositionWithdrawn":
+            # decrement totalPositions if we're tracking it
+            pass
 
     async def backfill(self, max_pages: int = 5) -> None:
-        log.info("backfill starting…")
-        before = None
-        total = 0
-        for page in range(max_pages):
-            sigs = await self.rpc.get_signatures_for_address(
-                self.cfg.program_id, limit=1000, before=before
-            )
-            if not sigs:
-                break
-            log.info("backfill page %d: %d sigs", page + 1, len(sigs))
-            for s in reversed(sigs):
-                if s.get("err") is not None:
-                    continue
-                tx = await self.rpc.get_transaction(s["signature"])
-                if not tx or not tx.get("meta"):
-                    continue
-                meta = tx["meta"]
-                logs = meta.get("logMessages") or []
-                n = await self.process_tx_logs(
-                    s["signature"],
-                    s.get("slot", 0),
-                    s.get("blockTime") or 0,
-                    logs,
-                    meta.get("err"),
+        log.info("backfill starting (markets seen here will be hidden)…")
+        self._hide_new_markets = True
+        try:
+            before = None
+            total = 0
+            for page in range(max_pages):
+                sigs = await self.rpc.get_signatures_for_address(
+                    self.cfg.program_id, limit=1000, before=before
                 )
-                total += n
-            before = sigs[-1]["signature"]
-            await asyncio.sleep(0.2)
-        log.info("backfill complete: %d events written", total)
+                if not sigs:
+                    break
+                log.info("backfill page %d: %d sigs", page + 1, len(sigs))
+                for s in reversed(sigs):
+                    if s.get("err") is not None:
+                        continue
+                    tx = await self.rpc.get_transaction(s["signature"])
+                    if not tx or not tx.get("meta"):
+                        continue
+                    meta = tx["meta"]
+                    logs = meta.get("logMessages") or []
+                    n = await self.process_tx_logs(
+                        s["signature"],
+                        s.get("slot", 0),
+                        s.get("blockTime") or 0,
+                        logs,
+                        meta.get("err"),
+                    )
+                    total += n
+                before = sigs[-1]["signature"]
+                await asyncio.sleep(0.2)
+            log.info("backfill complete: %d events written", total)
+        finally:
+            self._hide_new_markets = False
 
     async def tail(self) -> None:
         log.info("tailing program logs via websocket…")
@@ -227,7 +246,12 @@ class Indexer:
                     tx.signature, tx.slot, tx.block_time, tx.logs, tx.err
                 )
                 if n:
-                    log.info("tail: %s slot=%d events=%d", tx.signature[:8], tx.slot, n)
+                    log.info(
+                        "tail: %s slot=%d events=%d",
+                        tx.signature[:8],
+                        tx.slot,
+                        n,
+                    )
 
 
 async def amain() -> int:

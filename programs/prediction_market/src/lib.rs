@@ -115,6 +115,15 @@ pub mod prediction_market {
         instructions::claim_payout::claim_payout_callback_handler(ctx, output)
     }
 
+    // ── Cancellation & withdrawal (new) ─────────────────────────────────────
+    pub fn cancel_market(ctx: Context<CancelMarket>) -> Result<()> {
+        instructions::cancel_market::handler(ctx)
+    }
+
+    pub fn withdraw_position(ctx: Context<WithdrawPosition>) -> Result<()> {
+        instructions::withdraw_position::handler(ctx)
+    }
+
     // ── CompDef inits ───────────────────────────────────────────────────────
     pub fn init_submit_position_comp_def(
         ctx: Context<InitSubmitPositionCompDef>,

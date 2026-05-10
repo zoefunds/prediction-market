@@ -15,18 +15,12 @@ log = logging.getLogger(__name__)
 
 
 def init_firestore(cfg: Config) -> Client:
-    """Initialize Firebase Admin and return a Firestore client.
-
-    Three modes:
-      1. Local emulator: FIRESTORE_EMULATOR_HOST set → use anonymous creds.
-      2. Service account: GOOGLE_APPLICATION_CREDENTIALS path set.
-      3. Application Default Credentials.
-    """
+    """Initialize Firebase Admin and return a Firestore client."""
     if not firebase_admin._apps:
         if cfg.firestore_emulator_host:
-            # Emulator: no real credentials needed; firebase-admin still
-            # demands *something*, so we wrap a mock.
-            cred = credentials.ApplicationDefault.__new__(credentials.ApplicationDefault)
+            cred = credentials.ApplicationDefault.__new__(
+                credentials.ApplicationDefault
+            )
             cred._g_credential = AnonymousCredentials()
             cred._project_id = cfg.firebase_project_id
             firebase_admin.initialize_app(
@@ -49,13 +43,33 @@ def init_firestore(cfg: Config) -> Client:
     return firestore.client()
 
 
-def upsert_market(db: Client, market_id: str, data: Dict[str, Any]) -> None:
-    """Idempotently merge market state."""
+def upsert_market(
+    db: Client, market_id: str, data: Dict[str, Any]
+) -> None:
+    """Merge data into markets/{market_id}.
+
+    Special handling: if the doc already has `hidden=True`, we never overwrite
+    that flag. This lets us mark old test markets as hidden once and have them
+    stay hidden across reindexing.
+    """
     ref = db.collection("markets").document(market_id)
-    payload = {**data, "updatedAt": SERVER_TIMESTAMP}
-    if "createdAt" not in data:
-        payload.setdefault("createdAt", SERVER_TIMESTAMP)
-    ref.set(payload, merge=True)
+    snap = ref.get()
+    if snap.exists:
+        existing = snap.to_dict() or {}
+        # Preserve hidden flag across upserts
+        if existing.get("hidden") is True and "hidden" not in data:
+            # Don't pass hidden in data; merge=True will leave it alone.
+            pass
+        ref.set({**data, "updatedAt": SERVER_TIMESTAMP}, merge=True)
+    else:
+        ref.set(
+            {
+                **data,
+                "createdAt": SERVER_TIMESTAMP,
+                "updatedAt": SERVER_TIMESTAMP,
+            },
+            merge=True,
+        )
 
 
 def write_event(
@@ -69,7 +83,7 @@ def write_event(
     block_time: int,
     payload: Dict[str, Any],
 ) -> bool:
-    """Write an event idempotently. Returns True if newly inserted."""
+    """Idempotent event write. Returns True if newly inserted, False if exists."""
     ref = db.collection("events").document(event_id)
     snap = ref.get()
     if snap.exists:
