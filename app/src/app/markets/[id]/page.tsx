@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { doc, onSnapshot } from "firebase/firestore";
 import { formatDistanceToNow } from "date-fns";
-import { ArrowLeft, Lock, Users, TrendingUp } from "lucide-react";
+import { ArrowLeft, Users, TrendingUp, Coins } from "lucide-react";
 
 import { TopNav } from "@/components/layout/TopNav";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,6 @@ import { getFirebase } from "@/lib/firebase/client";
 import type { Market } from "@/types";
 import { PositionDialog } from "@/components/markets/PositionDialog";
 import { CancelMarketButton } from "@/components/markets/CancelMarketButton";
-
 
 export default function MarketDetailPage() {
   const params = useParams<{ id: string }>();
@@ -83,6 +82,13 @@ export default function MarketDetailPage() {
   );
 }
 
+function computeOdds(yesPool: number, noPool: number) {
+  const total = yesPool + noPool;
+  if (total === 0) return { yesPct: 50, noPct: 50, total: 0 };
+  const yesPct = Math.round((yesPool / total) * 100);
+  return { yesPct, noPct: 100 - yesPct, total };
+}
+
 function MarketView({
   market,
   onPick,
@@ -96,6 +102,11 @@ function MarketView({
     closeMs > Date.now()
       ? `Closes ${formatDistanceToNow(closeMs, { addSuffix: true })}`
       : `Closed ${formatDistanceToNow(closeMs, { addSuffix: true })}`;
+
+  const yesPool = market.yesPool ?? 0;
+  const noPool = market.noPool ?? 0;
+  const { yesPct, noPct, total } = computeOdds(yesPool, noPool);
+  const hasActivity = total > 0;
 
   return (
     <div className="space-y-6">
@@ -115,6 +126,9 @@ function MarketView({
             }
           >
             {market.status}
+            {market.status === "Resolved" && market.winningOutcome !== undefined
+              ? ` • ${market.winningOutcome === 1 ? "YES" : "NO"} won`
+              : ""}
           </Badge>
           <span className="text-xs text-muted-foreground">
             Market #{market.id}
@@ -129,6 +143,35 @@ function MarketView({
         <p className="mt-2 text-xs text-muted-foreground">{closeLabel}</p>
       </div>
 
+      {/* Odds bar */}
+      <Card>
+        <CardContent className="py-5">
+          <div className="flex items-center justify-between text-sm mb-2">
+            <span className="font-mono font-semibold text-[color:var(--color-yes)]">
+              YES {hasActivity ? `${yesPct}%` : "—"}
+            </span>
+            <span className="font-mono font-semibold text-[color:var(--color-no)]">
+              {hasActivity ? `${noPct}%` : "—"} NO
+            </span>
+          </div>
+          <div className="h-3 w-full overflow-hidden rounded-full bg-secondary/60">
+            {hasActivity ? (
+              <div
+                className="h-full bg-[color:var(--color-yes)] transition-all"
+                style={{ width: `${yesPct}%` }}
+              />
+            ) : (
+              <div className="h-full w-full bg-secondary/40" />
+            )}
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground font-mono">
+            {hasActivity
+              ? `${(yesPool / 1e9).toFixed(3)} / ${(noPool / 1e9).toFixed(3)} SOL pooled`
+              : "No positions yet"}
+          </p>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Take a position</CardTitle>
@@ -141,7 +184,7 @@ function MarketView({
                 className="bg-[color:var(--color-yes)] text-[color:var(--color-yes-fg)] hover:brightness-110"
                 onClick={() => onPick(1)}
               >
-                YES
+                YES {hasActivity ? `${yesPct}%` : ""}
               </Button>
               <Button
                 size="lg"
@@ -149,7 +192,7 @@ function MarketView({
                 className="border-[color:var(--color-no)]/50 text-[color:var(--color-no)] hover:bg-[color:var(--color-no)]/10"
                 onClick={() => onPick(0)}
               >
-                NO
+                NO {hasActivity ? `${noPct}%` : ""}
               </Button>
             </div>
           ) : (
@@ -157,11 +200,6 @@ function MarketView({
               This market is no longer accepting positions.
             </p>
           )}
-          <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Lock className="h-3 w-3" />
-            Your stake and side are encrypted before submission. Settlement
-            happens in SOL on Solana.
-          </p>
         </CardContent>
       </Card>
 
@@ -186,18 +224,14 @@ function MarketView({
             value={String(market.totalPositions ?? 0)}
           />
           <Stat
+            icon={<Coins className="h-4 w-4" />}
+            label="Total staked"
+            value={`${(total / 1e9).toFixed(3)} SOL`}
+          />
+          <Stat
             icon={<TrendingUp className="h-4 w-4" />}
             label="Status"
             value={market.status}
-          />
-          <Stat
-            icon={<Lock className="h-4 w-4" />}
-            label="Pools"
-            value={
-              market.status === "Resolved"
-                ? `${(market.yesPool ?? 0) / 1e9} / ${(market.noPool ?? 0) / 1e9} SOL`
-                : "Encrypted"
-            }
           />
         </CardContent>
       </Card>

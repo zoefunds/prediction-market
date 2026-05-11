@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Lock, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useSubmitPosition } from "@/hooks/useSubmitPosition";
 
@@ -36,7 +36,6 @@ export function PositionDialog({
   const stakeNum = Number(stake);
   const valid = stakeNum >= 0.001 && stakeNum <= 1000 && !!wallet.publicKey;
 
-  // Reset on open
   useEffect(() => {
     if (open) setStake("0.05");
   }, [open]);
@@ -46,9 +45,7 @@ export function PositionDialog({
     await submit
       .mutateAsync({ marketId, outcome, stakeSol: stakeNum })
       .then(() => onOpenChange(false))
-      .catch(() => {
-        /* toast already shown */
-      });
+      .catch(() => { /* toast already shown */ });
   };
 
   const sideLabel = outcome === 1 ? "YES" : "NO";
@@ -62,8 +59,7 @@ export function PositionDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
-            Stake on{" "}
-            <span className={sideColor}>{sideLabel}</span>
+            Stake on <span className={sideColor}>{sideLabel}</span>
           </DialogTitle>
           <DialogDescription className="line-clamp-2">
             {marketQuestion}
@@ -102,13 +98,10 @@ export function PositionDialog({
           </div>
 
           <div className="rounded-md bg-secondary/40 p-3 text-xs text-muted-foreground">
-            <p className="flex items-center gap-1.5 text-foreground">
-              <Lock className="h-3 w-3 text-primary" />
-              Your side and stake amount are encrypted before going on-chain.
-            </p>
-            <p className="mt-1.5">
-              Only you (with your wallet) can later prove what you wagered. The
-              market totals stay encrypted until resolution.
+            <p>
+              Payout is proportional to the winning pool: if you win, you receive
+              your stake back plus a share of the losing pool, scaled by your
+              contribution to the winning side.
             </p>
           </div>
         </div>
@@ -133,7 +126,7 @@ export function PositionDialog({
             {submit.isPending ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Encrypting & signing…
+                Signing…
               </>
             ) : (
               `Stake ${stake} SOL on ${sideLabel}`

@@ -144,7 +144,7 @@ async function main() {
 
   const baseSeed = getArciumAccountBaseSeed("ComputationDefinitionAccount");
 
-  const circuits: CircuitName[] = ["submit_position_v2"];
+  const circuits: CircuitName[] = ["submit_position_v2", "resolve_market", "claim_payout"];
 
   for (const name of circuits) {
     console.log(`\n──── ${name} ────`);

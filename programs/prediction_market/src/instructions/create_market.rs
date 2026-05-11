@@ -48,11 +48,11 @@ pub fn create_market_handler(
     category: String,
     close_ts: i64,
     resolver: Pubkey,
-    initial_totals_ciphertext: [u8; 96],
-    initial_totals_pubkey: [u8; 32],
-    initial_totals_nonce: u128,
 ) -> Result<()> {
-    require!(question.len() <= MAX_QUESTION_LEN, ErrorCode::QuestionTooLong);
+    require!(
+        question.len() <= MAX_QUESTION_LEN,
+        ErrorCode::QuestionTooLong
+    );
     require!(
         description.len() <= MAX_DESCRIPTION_LEN,
         ErrorCode::DescriptionTooLong
@@ -77,9 +77,6 @@ pub fn create_market_handler(
     market.winning_outcome = 0;
     market.yes_pool = 0;
     market.no_pool = 0;
-    market.totals_ciphertext = initial_totals_ciphertext;
-    market.totals_pubkey = initial_totals_pubkey;
-    market.totals_nonce = initial_totals_nonce;
     market.total_positions = 0;
     market.bump = ctx.bumps.market;
     market.vault_bump = ctx.bumps.vault;
@@ -87,7 +84,7 @@ pub fn create_market_handler(
     config.market_count = config
         .market_count
         .checked_add(1)
-        .ok_or(error!(ErrorCode::AlreadyResolved))?;
+        .ok_or(error!(ErrorCode::ArithmeticOverflow))?;
 
     emit!(MarketCreated {
         market: market.key(),

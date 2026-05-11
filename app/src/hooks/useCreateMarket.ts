@@ -7,7 +7,6 @@ import { toast } from "sonner";
 
 import { getProgram, PROGRAM_ID } from "@/lib/solana/program";
 import { deriveConfigPda } from "@/lib/solana/pdas";
-import { encryptInitialTotals } from "@/lib/arcium/encryption";
 
 export interface CreateMarketInput {
   question: string;
@@ -35,7 +34,6 @@ export function useCreateMarket() {
       const program = getProgram(connection, wallet as never);
       const configPda = deriveConfigPda(PROGRAM_ID);
 
-      // Pull next market id from Config (idempotent)
       let marketCount: BN;
       try {
         const cfg = await program.account.config.fetch(configPda);
@@ -45,11 +43,6 @@ export function useCreateMarket() {
           "Program Config is not yet initialized. Ask an admin to call `initialize`.",
         );
       }
-
-      const totals = await encryptInitialTotals(
-        program.provider,
-        PROGRAM_ID,
-      );
 
       const resolverPk = input.resolverAddress
         ? new (await import("@solana/web3.js")).PublicKey(input.resolverAddress)
@@ -62,9 +55,6 @@ export function useCreateMarket() {
           input.category,
           new BN(input.closeTs),
           resolverPk,
-          totals.ciphertext,
-          totals.userPubkey,
-          new BN(totals.nonce.toString()),
         )
         .accounts({ creator: wallet.publicKey })
         .rpc({ commitment: "confirmed" });

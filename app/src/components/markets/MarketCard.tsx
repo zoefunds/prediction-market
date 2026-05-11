@@ -7,6 +7,13 @@ import { TrendingUp, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { Market } from "@/types";
 
+function computeOdds(yesPool: number, noPool: number) {
+  const total = yesPool + noPool;
+  if (total === 0) return { yesPct: 50, noPct: 50, total: 0 };
+  const yesPct = Math.round((yesPool / total) * 100);
+  return { yesPct, noPct: 100 - yesPct, total };
+}
+
 export function MarketCard({ market }: { market: Market }) {
   const closeMs = market.closeTs * 1000;
   const closing = closeMs - Date.now();
@@ -14,6 +21,12 @@ export function MarketCard({ market }: { market: Market }) {
     closing > 0
       ? `Closes ${formatDistanceToNow(closeMs, { addSuffix: true })}`
       : "Closed";
+
+  const yesPool = market.yesPool ?? 0;
+  const noPool = market.noPool ?? 0;
+  const { yesPct, noPct, total } = computeOdds(yesPool, noPool);
+  const hasActivity = total > 0;
+  const totalSol = total / 1e9;
 
   return (
     <motion.div
@@ -42,30 +55,38 @@ export function MarketCard({ market }: { market: Market }) {
           ) : null}
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-2">
-          <div className="rounded-md bg-secondary/40 p-2 text-center">
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-              YES
-            </div>
-            <div className="font-mono text-sm font-semibold text-[color:var(--color-yes)]">
-              {market.status === "Resolved" && market.winningOutcome === 1
-                ? "WON"
-                : "—"}
-            </div>
+        {/* YES/NO bar */}
+        <div className="mt-4">
+          <div className="flex items-center justify-between text-xs mb-1.5">
+            <span className="font-mono text-[color:var(--color-yes)]">
+              YES {hasActivity ? `${yesPct}%` : "—"}
+            </span>
+            <span className="font-mono text-[color:var(--color-no)]">
+              {hasActivity ? `${noPct}%` : "—"} NO
+            </span>
           </div>
-          <div className="rounded-md bg-secondary/40 p-2 text-center">
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-              NO
-            </div>
-            <div className="font-mono text-sm font-semibold text-[color:var(--color-no)]">
-              {market.status === "Resolved" && market.winningOutcome === 0
-                ? "WON"
-                : "—"}
-            </div>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-secondary/60">
+            {hasActivity ? (
+              <div
+                className="h-full bg-[color:var(--color-yes)] transition-all"
+                style={{ width: `${yesPct}%` }}
+              />
+            ) : (
+              <div className="h-full w-full bg-secondary/40" />
+            )}
           </div>
+          {hasActivity ? (
+            <p className="mt-1.5 text-[10px] text-muted-foreground font-mono">
+              {totalSol.toFixed(3)} SOL staked
+            </p>
+          ) : (
+            <p className="mt-1.5 text-[10px] text-muted-foreground">
+              No positions yet
+            </p>
+          )}
         </div>
 
-        <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
+        <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
           <span className="flex items-center gap-1">
             <Users className="h-3.5 w-3.5" />
             {market.totalPositions ?? 0} positions
@@ -73,6 +94,9 @@ export function MarketCard({ market }: { market: Market }) {
           <span className="flex items-center gap-1">
             <TrendingUp className="h-3.5 w-3.5" />
             {market.status}
+            {market.status === "Resolved" && market.winningOutcome !== undefined
+              ? ` • ${market.winningOutcome === 1 ? "YES" : "NO"} won`
+              : ""}
           </span>
         </div>
       </Link>

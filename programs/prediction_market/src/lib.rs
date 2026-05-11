@@ -5,7 +5,6 @@ pub mod instructions;
 pub mod state;
 
 use anchor_lang::prelude::*;
-use arcium_anchor::prelude::*;
 
 pub use constants::*;
 pub use instructions::*;
@@ -14,7 +13,7 @@ pub use state::*;
 
 declare_id!("3yC9BuiC3kkkjDw1wFtW4AxXmezRM3U8GfWRxGoqxd7A");
 
-#[arcium_program]
+#[program]
 pub mod prediction_market {
     use super::*;
 
@@ -33,9 +32,6 @@ pub mod prediction_market {
         category: String,
         close_ts: i64,
         resolver: Pubkey,
-        initial_totals_ciphertext: [u8; 96],
-        initial_totals_pubkey: [u8; 32],
-        initial_totals_nonce: u128,
     ) -> Result<()> {
         instructions::create_market::create_market_handler(
             ctx,
@@ -44,100 +40,33 @@ pub mod prediction_market {
             category,
             close_ts,
             resolver,
-            initial_totals_ciphertext,
-            initial_totals_pubkey,
-            initial_totals_nonce,
         )
     }
 
-    // ── Position submission (encrypted) ─────────────────────────────────────
     pub fn submit_position(
-        ctx: Context<SubmitPositionV2>,
-        computation_offset: u64,
-        position_ciphertext: [u8; 64],
-        user_pubkey: [u8; 32],
-        nonce: u128,
+        ctx: Context<SubmitPosition>,
+        outcome: u8,
         stake_amount: u64,
     ) -> Result<()> {
-        instructions::submit_position::submit_position_handler(
-            ctx,
-            computation_offset,
-            position_ciphertext,
-            user_pubkey,
-            nonce,
-            stake_amount,
-        )
+        instructions::submit_position::submit_position_handler(ctx, outcome, stake_amount)
     }
 
-    #[arcium_callback(encrypted_ix = "submit_position_v2")]
-    pub fn submit_position_v2_callback(
-        ctx: Context<SubmitPositionV2Callback>,
-        output: SignedComputationOutputs<SubmitPositionV2Output>,
+    pub fn resolve_market(
+        ctx: Context<ResolveMarket>,
+        winning_outcome: u8,
     ) -> Result<()> {
-        instructions::submit_position::submit_position_v2_callback_handler(ctx, output)
+        instructions::resolve_market::resolve_market_handler(ctx, winning_outcome)
     }
 
-    // ── Resolution ──────────────────────────────────────────────────────────
-    pub fn request_resolution(
-        ctx: Context<RequestResolution>,
-        computation_offset: u64,
-        outcome_ciphertext: [u8; 32],
-        resolver_pubkey: [u8; 32],
-        nonce: u128,
-    ) -> Result<()> {
-        instructions::resolve_market::request_resolution_handler(
-            ctx,
-            computation_offset,
-            outcome_ciphertext,
-            resolver_pubkey,
-            nonce,
-        )
+    pub fn claim_payout(ctx: Context<ClaimPayout>) -> Result<()> {
+        instructions::claim_payout::claim_payout_handler(ctx)
     }
 
-    #[arcium_callback(encrypted_ix = "resolve_market")]
-    pub fn resolve_market_callback(
-        ctx: Context<ResolveMarketCallback>,
-        output: SignedComputationOutputs<ResolveMarketOutput>,
-    ) -> Result<()> {
-        instructions::resolve_market::resolve_market_callback_handler(ctx, output)
-    }
-
-    // ── Claim ───────────────────────────────────────────────────────────────
-    pub fn claim_payout(ctx: Context<ClaimPayout>, computation_offset: u64) -> Result<()> {
-        instructions::claim_payout::claim_payout_handler(ctx, computation_offset)
-    }
-
-    #[arcium_callback(encrypted_ix = "claim_payout")]
-    pub fn claim_payout_callback(
-        ctx: Context<ClaimPayoutCallback>,
-        output: SignedComputationOutputs<ClaimPayoutOutput>,
-    ) -> Result<()> {
-        instructions::claim_payout::claim_payout_callback_handler(ctx, output)
-    }
-
-    // ── Cancellation & withdrawal (new) ─────────────────────────────────────
     pub fn cancel_market(ctx: Context<CancelMarket>) -> Result<()> {
         instructions::cancel_market::handler(ctx)
     }
 
     pub fn withdraw_position(ctx: Context<WithdrawPosition>) -> Result<()> {
         instructions::withdraw_position::handler(ctx)
-    }
-
-    // ── CompDef inits ───────────────────────────────────────────────────────
-    pub fn init_submit_position_comp_def(
-        ctx: Context<InitSubmitPositionCompDef>,
-    ) -> Result<()> {
-        instructions::init_comp_defs::init_submit_position_comp_def_handler(ctx)
-    }
-
-    pub fn init_resolve_market_comp_def(
-        ctx: Context<InitResolveMarketCompDef>,
-    ) -> Result<()> {
-        instructions::init_comp_defs::init_resolve_market_comp_def_handler(ctx)
-    }
-
-    pub fn init_claim_payout_comp_def(ctx: Context<InitClaimPayoutCompDef>) -> Result<()> {
-        instructions::init_comp_defs::init_claim_payout_comp_def_handler(ctx)
     }
 }
