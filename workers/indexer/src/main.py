@@ -167,40 +167,20 @@ class Indexer:
         if not mid:
             return
 
-        if name == "PositionSubmitted":
-            upsert_market(
-                self.db,
-                mid,
-                {"totalPositions": payload.get("total_positions")},
-            )
-        elif name == "MarketResolutionRequested":
-            upsert_market(self.db, mid, {"status": "AwaitingResolution"})
-        elif name == "MarketResolved":
-            yes = payload.get("yes_pool")
-            no = payload.get("no_pool")
-            upsert_market(
-                self.db,
-                mid,
-                {
-                    "status": "Resolved",
-                    "winningOutcome": payload.get("winning_outcome"),
-                    "yesPool": int(yes) if isinstance(yes, str) else yes,
-                    "noPool": int(no) if isinstance(no, str) else no,
-                    "resolvedTs": payload.get("timestamp"),
-                },
-            )
-        elif name == "MarketCancelled":
-            upsert_market(
-                self.db,
-                mid,
-                {
-                    "status": "Cancelled",
-                    "resolvedTs": payload.get("timestamp"),
-                },
-            )
-        elif name == "PositionWithdrawn":
-            # decrement totalPositions if we're tracking it
-            pass
+        # State-mutating events: re-enrich from chain account, which is the
+        # source of truth. The on-chain event payloads can be stale (e.g.
+        # PositionSubmitted.total_positions is read before the callback
+        # increments it). Re-reading the account avoids per-event bookkeeping.
+        if name in (
+            "PositionSubmitted",
+            "PositionWithdrawn",
+            "MarketResolutionRequested",
+            "MarketResolved",
+            "MarketCancelled",
+        ):
+            enriched = await self._enrich_from_chain(pda)
+            if enriched:
+                upsert_market(self.db, mid, enriched)
 
     async def backfill(self, max_pages: int = 5) -> None:
         log.info("backfill starting (markets seen here will be hidden)…")

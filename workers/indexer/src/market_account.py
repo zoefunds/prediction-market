@@ -1,26 +1,4 @@
-"""Decode the on-chain Market account.
-
-Layout matches programs/prediction_market/src/state/market.rs exactly:
-   8  bytes  Anchor account discriminator
-   8  bytes  id: u64
-  32  bytes  creator: Pubkey
-  32  bytes  resolver: Pubkey
-  4+N        question: String
-  4+N        description: String
-  4+N        category: String
-   8  bytes  close_ts: i64
-   8  bytes  resolved_ts: i64
-   1  byte   status: enum
-   1  byte   winning_outcome: u8
-   8  bytes  yes_pool: u64
-   8  bytes  no_pool: u64
-  96  bytes  totals_ciphertext: [u8; 96]
-  32  bytes  totals_pubkey: [u8; 32]
-  16  bytes  totals_nonce: u128
-   4  bytes  total_positions: u32
-   1  byte   bump: u8
-   1  byte   vault_bump: u8
-"""
+"""Decode the on-chain Market account (v0.2 — public stakes, no MPC)."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -71,10 +49,6 @@ def decode_market_account(raw: bytes) -> Optional[MarketAccount]:
         winning_outcome = raw[o]; o += 1
         yes_pool = int.from_bytes(raw[o : o + 8], "little"); o += 8
         no_pool = int.from_bytes(raw[o : o + 8], "little"); o += 8
-        # Skip ciphertext blobs we don't need on-chain side.
-        o += 96   # totals_ciphertext
-        o += 32   # totals_pubkey
-        o += 16   # totals_nonce
         total_positions = int.from_bytes(raw[o : o + 4], "little"); o += 4
     except (IndexError, ValueError):
         return None
