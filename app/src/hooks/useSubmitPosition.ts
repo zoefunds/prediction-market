@@ -3,7 +3,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { BN } from "bn.js";
-import { randomBytes } from "crypto";
 import { toast } from "sonner";
 
 import {
@@ -63,6 +62,17 @@ function humanizeError(message: string): string {
 function packCiphertexts(cts: Array<Uint8Array | number[]>): number[] {
   return Array.from(Buffer.concat(cts.map((c) => Buffer.from(c))));
 }
+
+
+function randomBytesBrowser(len: number): Uint8Array {
+  const out = new Uint8Array(len);
+  if (typeof window !== "undefined" && window.crypto?.getRandomValues) {
+    window.crypto.getRandomValues(out);
+    return out;
+  }
+  throw new Error("Secure random unavailable in browser.");
+}
+
 
 function formatAnyError(err: unknown): string {
   const e: any = err;
@@ -133,7 +143,7 @@ export function useSubmitPosition() {
         Buffer.from(getCompDefAccOffset("submit_position_v2")).readUInt32LE(),
       );
 
-      const computationOffset = new BN(randomBytes(8), "le");
+      const computationOffset = new BN(randomBytesBrowser(8), "le");
       const computationAccount = getComputationAccAddress(clusterOffset, computationOffset);
 
       const mxePub = await getMXEPublicKey(program.provider as never, program.programId);
@@ -144,7 +154,7 @@ export function useSubmitPosition() {
       const sharedSecret = x25519.getSharedSecret(userPriv, mxePub);
       const cipher = new RescueCipher(sharedSecret);
 
-      const nonce = randomBytes(16);
+      const nonce = randomBytesBrowser(16);
       const encrypted = cipher.encrypt([BigInt(outcome), lamports], nonce);
       const ciphertext = packCiphertexts(encrypted);
       const nonceBn = new BN(deserializeLE(nonce).toString());
