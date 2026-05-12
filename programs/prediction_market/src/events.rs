@@ -40,19 +40,3 @@ pub struct PayoutClaimed {
     pub amount: u64,
     pub timestamp: i64,
 }
-
-#[event]
-pub struct MarketCancelled {
-    pub market: Pubkey,
-    pub creator: Pubkey,
-    pub timestamp: i64,
-    pub total_positions: u32,
-}
-
-#[event]
-pub struct PositionWithdrawn {
-    pub market: Pubkey,
-    pub user: Pubkey,
-    pub amount: u64,
-    pub timestamp: i64,
-}
