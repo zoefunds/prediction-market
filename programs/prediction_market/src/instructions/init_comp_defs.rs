@@ -1,12 +1,14 @@
 use anchor_lang::prelude::*;
 use arcium_anchor::prelude::*;
+use arcium_client::idl::arcium::types::{CircuitSource, OffChainCircuitSource};
+use arcium_macros::circuit_hash;
 
 use crate::ID;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // submit_position
 // ─────────────────────────────────────────────────────────────────────────────
-#[init_computation_definition_accounts("submit_position_v2", payer)]
+#[init_computation_definition_accounts("submit_position", payer)]
 #[derive(Accounts)]
 pub struct InitSubmitPositionCompDef<'info> {
     #[account(mut)]
@@ -29,8 +31,19 @@ pub struct InitSubmitPositionCompDef<'info> {
 pub fn init_submit_position_comp_def_handler(
     ctx: Context<InitSubmitPositionCompDef>,
 ) -> Result<()> {
-    init_comp_def(ctx.accounts, None, None)?;
+    // OFF-CHAIN circuit source for large circuit stability on devnet.
+    // TODO: replace this URL with your actual public circuit URL.
+    init_comp_def(
+        ctx.accounts,
+        Some(CircuitSource::OffChain(OffChainCircuitSource {
+            source: "https://<your-public-bucket>/circuits/submit_position.arcis".to_string(),
+            hash: circuit_hash!("submit_position"),
+        })),
+        None,
+    )?;
+
     Ok(())
+
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -56,9 +69,7 @@ pub struct InitResolveMarketCompDef<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn init_resolve_market_comp_def_handler(
-    ctx: Context<InitResolveMarketCompDef>,
-) -> Result<()> {
+pub fn init_resolve_market_comp_def_handler(ctx: Context<InitResolveMarketCompDef>) -> Result<()> {
     init_comp_def(ctx.accounts, None, None)?;
     Ok(())
 }

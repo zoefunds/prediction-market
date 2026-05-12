@@ -24,7 +24,7 @@ import * as os from "os";
 import { PredictionMarket } from "../target/types/prediction_market";
 
 type CircuitName =
-  | "submit_position_v2"
+  | "submit_position"
   | "resolve_market"
   | "claim_payout";
 
@@ -109,7 +109,7 @@ async function main() {
   const baseSeed = getArciumAccountBaseSeed("ComputationDefinitionAccount");
 
   // Process only this list — change as needed for re-uploads.
-  const circuits: CircuitName[] = ["submit_position_v2"];
+  const circuits: CircuitName[] = ["submit_position"];
 
   for (const name of circuits) {
     console.log(`\n──── ${name} ────`);
@@ -125,7 +125,7 @@ async function main() {
       console.log("  already initialized, skipping init.");
     } else {
       const methodFn =
-        name === "submit_position_v2"
+        name === "submit_position"
           ? program.methods.initSubmitPositionCompDef()
           : name === "resolve_market"
             ? program.methods.initResolveMarketCompDef()
@@ -144,7 +144,7 @@ async function main() {
     }
 
     // Map our v2 name back to the on-disk file name (Rust circuit was renamed).
-    const fileName = name === "submit_position_v2" ? "submit_position_v2" : name;
+    const fileName = name === "submit_position" ? "submit_position" : name;
     const circuitPath = `build/${fileName}.arcis`;
     if (!fs.existsSync(circuitPath)) {
       throw new Error(`Missing circuit: ${circuitPath}`);
