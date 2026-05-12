@@ -10,10 +10,9 @@ export function DevnetNotice() {
         <div className="text-xs text-muted-foreground">
           <p className="font-medium text-yellow-200/90">Devnet preview</p>
           <p className="mt-0.5">
-            On-chain market creation works end-to-end. Encrypted position
-            submission is wired but blocked by an in-progress Arcium MPC
-            circuit upload — we&apos;ll finalize it once the dedicated RPC is
-            provisioned. Your wallet is never charged when the queue rejects.
+            Submissions are temporarily paused due to a devnet Arcium MPC
+            finalization incident. Position entry is disabled until callback
+            finalization is stable again.
           </p>
         </div>
       </div>
