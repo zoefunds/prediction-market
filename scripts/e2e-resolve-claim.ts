@@ -191,7 +191,7 @@ async function main() {
       executingPool: getExecutingPoolAccAddress(CLUSTER_OFFSET),
       compDefAccount: getCompDefAccAddress(
         program.programId,
-        Buffer.from(getCompDefAccOffset("submit_position_v2")).readUInt32LE(),
+        Buffer.from(getCompDefAccOffset("submit_position_v3")).readUInt32LE(),
       ),
     })
     .signers([owner])

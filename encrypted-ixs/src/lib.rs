@@ -19,7 +19,7 @@ mod circuits {
     /// callback fits in one Solana tx. The user keeps their plaintext locally
     /// and re-supplies it for claim.
     #[instruction]
-    pub fn submit_position_v2(
+    pub fn submit_position_v3(
         position_ctxt: Enc<Shared, PositionInput>,
         totals_ctxt: Enc<Mxe, MarketTotals>,
     ) -> Enc<Mxe, MarketTotals> {
