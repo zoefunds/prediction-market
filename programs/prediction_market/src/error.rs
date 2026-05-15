@@ -46,4 +46,19 @@ pub enum ErrorCode {
 
     #[msg("Insufficient vault balance for payout")]
     InsufficientVaultBalance,
+
+    #[msg("Caller is not authorized for this operation")]
+    Unauthorized,
+
+    #[msg("Market is not in Cancelled status")]
+    MarketNotCancelled,
+
+    #[msg("Vault does not have enough balance to refund")]
+    VaultUnderfunded,
+
+    #[msg("Arithmetic overflow")]
+    ArithmeticOverflow,
+
+    #[msg("Stake amount must be greater than zero")]
+    InvalidStake,
 }

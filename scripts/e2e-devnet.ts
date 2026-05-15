@@ -229,7 +229,26 @@ async function main() {
   );
   console.log("    finalize tx:", finalizeSig);
 
-  const event = await positionEventPromise;
+  // Strictly verify finalize tx result on-chain.
+  const finTx = await connection.getTransaction(finalizeSig, {
+    commitment: "confirmed",
+    maxSupportedTransactionVersion: 0,
+  });
+  if (!finTx) {
+    throw new Error(`Finalize tx not found: ${finalizeSig}`);
+  }
+  if (finTx.meta?.err) {
+    const logs = (finTx.meta.logMessages ?? []).join("\n");
+    throw new Error(
+      `Finalize failed for ${finalizeSig}: ${JSON.stringify(finTx.meta.err)}\n${logs}`,
+    );
+  }
+
+  // Do not hang forever waiting for event.
+  const event = await Promise.race([
+    positionEventPromise,
+    new Promise((_, rej) => setTimeout(() => rej(new Error("Timed out waiting for PositionSubmitted event")), 120_000)),
+  ]);
   await program.removeEventListener(lid);
   console.log("    PositionSubmitted event:", {
     market: event.market.toBase58(),
@@ -258,6 +277,9 @@ async function main() {
     Buffer.from(marketAfter.totalsCiphertext),
   );
   console.log("    totals ciphertext changed:", totalsChanged);
+  if (!totalsChanged) {
+    throw new Error("BUG: totals ciphertext did not change after finalize");
+  }
 
   console.log("\n✓ E2E SMOKE TEST PASSED");
   console.log("  Bal :", (await connection.getBalance(owner.publicKey)) / 1e9, "SOL");

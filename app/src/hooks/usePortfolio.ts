@@ -16,35 +16,35 @@ export interface PortfolioPosition {
   marketPda: string;
   positionPda: string;
   amountLamports: string;
-  outcome: 0 | 1;
+  outcome?: 0 | 1;
   signature?: string;
   createdAt: number;
   onChainConfirmed: boolean;
   claimed: boolean;
 }
 
-// Position struct layout (post-v0.2):
-// 8  disc
-// 32 market         offset 8
-// 32 user           offset 40
-// 1  outcome        offset 72
-// 8  stake_amount   offset 73
-// 1  claimed        offset 81
-// 8  created_ts     offset 82
-// 1  bump           offset 90
-const OUTCOME_OFFSET = 72;
-const STAKE_OFFSET = 73;
-const CLAIMED_OFFSET = 81;
+interface LocalReceipt {
+  outcome: 0 | 1;
+  amountLamports: string;
+  signature: string;
+  createdAt: number;
+}
+
+const STAKE_OFFSET = 8 + 32 + 32 + 64 + 32 + 16; // 184
+const CLAIMED_OFFSET = STAKE_OFFSET + 8;          // 192
 
 export function usePortfolio() {
   const { publicKey } = useWallet();
   const { connection } = useConnection();
   const [positions, setPositions] = useState<PortfolioPosition[]>([]);
   const [loading, setLoading] = useState(true);
+  // Use a ref to ensure we never run twice, even if React strict-mode double-mounts
   const lastWalletRef = useRef<string | null>(null);
 
   useEffect(() => {
     const walletKey = publicKey?.toBase58() ?? null;
+
+    // Skip if same wallet — prevents re-fetch on connection reference changes
     if (walletKey === lastWalletRef.current) return;
     lastWalletRef.current = walletKey;
 
@@ -59,13 +59,8 @@ export function usePortfolio() {
 
     (async () => {
       try {
-        // Filter for Position accounts owned by this wallet.
-        // memcmp at offset 40 = user pubkey.
         const accs = await connection.getProgramAccounts(PROGRAM_ID, {
-          filters: [
-            { dataSize: 8 + 32 + 32 + 1 + 8 + 1 + 8 + 1 },
-            { memcmp: { offset: 40, bytes: walletKey } },
-          ],
+          filters: [{ memcmp: { offset: 40, bytes: walletKey } }],
         });
 
         if (cancelled) return;
@@ -80,16 +75,35 @@ export function usePortfolio() {
 
         if (cancelled) return;
 
+        const prefix = `pm:position:${walletKey}:`;
+        const receipts: Record<string, LocalReceipt> = {};
+        try {
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (!key?.startsWith(prefix)) continue;
+            const raw = localStorage.getItem(key);
+            if (!raw) continue;
+            const marketId = key.slice(prefix.length);
+            try {
+              receipts[marketId] = JSON.parse(raw);
+            } catch {
+              /* skip */
+            }
+          }
+        } catch {
+          /* no localStorage */
+        }
+
         const out: PortfolioPosition[] = [];
         for (const a of accs) {
           const data = a.account.data;
           const marketPda = new PublicKey(data.slice(8, 40)).toBase58();
-          const outcome = (data[OUTCOME_OFFSET] === 1 ? 1 : 0) as 0 | 1;
           const stake = data.readBigUInt64LE(STAKE_OFFSET).toString();
           const claimed = data[CLAIMED_OFFSET] === 1;
 
           const market = marketByPda[marketPda];
           const marketId = market?.id ?? marketPda.slice(0, 8);
+          const r = market ? receipts[market.id] : undefined;
 
           out.push({
             marketId,
@@ -99,13 +113,15 @@ export function usePortfolio() {
             marketPda,
             positionPda: a.pubkey.toBase58(),
             amountLamports: stake,
-            outcome,
-            createdAt: 0,
+            outcome: r?.outcome,
+            signature: r?.signature,
+            createdAt: r?.createdAt ?? 0,
             onChainConfirmed: true,
             claimed,
           });
         }
 
+        out.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
         if (!cancelled) setPositions(out);
       } catch (e) {
         console.error("portfolio load failed", e);

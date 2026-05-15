@@ -4,105 +4,79 @@ import { useMutation } from "@tanstack/react-query";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { BN } from "bn.js";
 import { toast } from "sonner";
-
 import {
-  RescueCipher,
-  awaitComputationFinalization,
-  deserializeLE,
-  getClusterAccAddress,
   getCompDefAccAddress,
   getCompDefAccOffset,
-  getComputationAccAddress,
-  getExecutingPoolAccAddress,
-  getMempoolAccAddress,
-  getMXEPublicKey,
   getMXEAccAddress,
-  x25519,
+  getMempoolAccAddress,
+  getExecutingPoolAccAddress,
+  getComputationAccAddress,
+  getClusterAccAddress,
 } from "@arcium-hq/client";
 
 import { getProgram, PROGRAM_ID } from "@/lib/solana/program";
-import { deriveVaultPda, derivePositionPda } from "@/lib/solana/pdas";
+import { deriveMarketPda, deriveVaultPda, derivePositionPda } from "@/lib/solana/pdas";
+import { encryptPosition } from "@/lib/arcium/encryption";
+
+const CLUSTER_OFFSET = Number(
+  process.env.NEXT_PUBLIC_ARCIUM_CLUSTER_OFFSET ?? "456",
+);
 
 export interface SubmitPositionInput {
-  marketPubkey: string;
+  marketId: string;
   outcome: 0 | 1;
   stakeSol: number;
 }
 
 export interface SubmitPositionResult {
   signature: string;
-  queueSig: string;
-  finalizedTxSig: string;
   positionPda: string;
+  computationOffset: string;
   receipt: { outcome: 0 | 1; amountLamports: string };
 }
 
-function safeStringify(v: unknown): string {
-  try {
-    return JSON.stringify(v, null, 2);
-  } catch {
-    return String(v);
-  }
+function randomU64BN(): BN {
+  const buf = new Uint8Array(8);
+  crypto.getRandomValues(buf);
+  return new BN(buf, "le");
 }
 
+function readUInt32LE(arr: Uint8Array): number {
+  return (
+    (arr[0] | 0) |
+    ((arr[1] | 0) << 8) |
+    ((arr[2] | 0) << 16) |
+    ((arr[3] | 0) << 24)
+  ) >>> 0;
+}
 
-
+/** Translate raw program errors into something humans can read. */
 function humanizeError(message: string): string {
-  const lower = message.toLowerCase();
-  if (lower.includes("insufficient")) return "Insufficient SOL for stake + transaction fee.";
-  if (message.includes("already in use") || message.includes("already exists")) {
-    return "You already have a position on this market. One position per wallet.";
+  // 0x189c = ComputationDefinitionNotCompleted
+  if (message.includes("0x189c") || message.includes("6300")) {
+    return (
+      "The Arcium MPC circuit for this network isn't fully provisioned yet. " +
+      "Position submission is on hold while infrastructure finishes uploading. " +
+      "(Devnet preview limitation; not a wallet issue.)"
+    );
   }
-  if (message.includes("MarketNotOpen")) return "Market is no longer accepting positions.";
-  if (message.includes("ZeroStake")) return "Stake must be greater than zero.";
-  if (message.includes("InvalidOutcome")) return "Outcome must be YES or NO.";
-  return message.split("\n")[0];
-}
-
-function packCiphertexts(cts: Array<Uint8Array | number[]>): number[] {
-  return Array.from(Buffer.concat(cts.map((c) => Buffer.from(c))));
-}
-
-
-function randomBytesBrowser(len: number): Uint8Array {
-  const out = new Uint8Array(len);
-  if (typeof window !== "undefined" && window.crypto?.getRandomValues) {
-    window.crypto.getRandomValues(out);
-    return out;
+  // 0x7dc = ConstraintAddress
+  if (message.includes("0x7dc") || message.includes("ConstraintAddress")) {
+    return "An on-chain account address didn't match expected. Try refreshing.";
   }
-  throw new Error("Secure random unavailable in browser.");
-}
-
-
-function formatAnyError(err: unknown): string {
-  const e: any = err;
-
-  const toStr = (v: any): string => {
-    if (typeof v === "string") return v;
-    try { return JSON.stringify(v, null, 2); } catch { return String(v); }
-  };
-
-  if (typeof err === "string") return err;
-
-  if (e?.logs) return Array.isArray(e.logs) ? e.logs.join("\n") : String(e.logs);
-
-  if (e?.error?.logs) {
-    return Array.isArray(e.error.logs) ? e.error.logs.join("\n") : String(e.error.logs);
+  // 0xbc4 = AccountNotInitialized
+  if (message.includes("0xbc4") || message.includes("AccountNotInitialized")) {
+    return "A required on-chain account isn't initialized. Devnet preview limitation.";
   }
-
-  if (e?.cause?.logs) {
-    return Array.isArray(e.cause.logs) ? e.cause.logs.join("\n") : String(e.cause.logs);
+  // 0x1777 = MultiTxCallbacksDisabled (shouldn't happen post-fix, but just in case)
+  if (message.includes("0x1777")) {
+    return "Multi-tx callbacks not enabled on the deployed program.";
   }
-
-  if (e?.message && typeof e.message === "string" && e.message !== "[object Object]") {
-    return e.message;
+  // Insufficient lamports
+  if (message.toLowerCase().includes("insufficient")) {
+    return "Insufficient SOL for stake + transaction fee.";
   }
-
-  if (e?.error?.message) return toStr(e.error.message);
-  if (e?.cause?.message) return toStr(e.cause.message);
-  if (e?.cause) return toStr(e.cause);
-
-  return toStr(err);
+  return message.split("\n")[0]; // first line only, so toast isn't massive
 }
 
 export function useSubmitPosition() {
@@ -110,63 +84,64 @@ export function useSubmitPosition() {
   const wallet = useWallet();
 
   return useMutation<SubmitPositionResult, Error, SubmitPositionInput>({
-    mutationFn: async ({ marketPubkey, outcome, stakeSol }) => {
+    mutationFn: async ({ marketId, outcome, stakeSol }) => {
       if (!wallet.publicKey || !wallet.signTransaction) {
         throw new Error("Connect a wallet first.");
       }
       if (stakeSol <= 0) throw new Error("Stake must be positive.");
-
       const lamports = BigInt(Math.floor(stakeSol * 1e9));
-      if (lamports < 1_000_000n) throw new Error("Minimum stake is 0.001 SOL.");
-
-      const program = getProgram(connection, wallet as never);
-      const { PublicKey } = await import("@solana/web3.js");
-      const marketPda = new PublicKey(marketPubkey);
-      const vaultPda = deriveVaultPda(PROGRAM_ID, marketPda);
-      const positionPda = derivePositionPda(PROGRAM_ID, marketPda, wallet.publicKey);
-
-      const existing = await connection.getAccountInfo(positionPda);
-      if (existing) throw new Error("You already have a position on this market. One position per wallet.");
-
-      const clusterOffset = Number(process.env.NEXT_PUBLIC_ARCIUM_CLUSTER_OFFSET);
-      if (!Number.isFinite(clusterOffset)) {
-        throw new Error("Missing/invalid NEXT_PUBLIC_ARCIUM_CLUSTER_OFFSET");
+      if (lamports < 1_000_000n) {
+        throw new Error("Minimum stake is 0.001 SOL.");
       }
 
-      const clusterAccount = getClusterAccAddress(clusterOffset);
-      const mxeAccount = getMXEAccAddress(program.programId);
-      const mempoolAccount = getMempoolAccAddress(clusterOffset);
-      const executingPool = getExecutingPoolAccAddress(clusterOffset);
-
-      const compDefAccount = getCompDefAccAddress(
-        program.programId,
-        Buffer.from(getCompDefAccOffset("submit_position_v2")).readUInt32LE(),
+      const program = getProgram(connection, wallet as never);
+      const marketIdBN = new BN(marketId);
+      const marketPda = deriveMarketPda(PROGRAM_ID, marketIdBN);
+      const vaultPda = deriveVaultPda(PROGRAM_ID, marketPda);
+      const positionPda = derivePositionPda(
+        PROGRAM_ID,
+        marketPda,
+        wallet.publicKey,
       );
 
-      const computationOffset = new BN(randomBytesBrowser(8), "le");
-      const computationAccount = getComputationAccAddress(clusterOffset, computationOffset);
+      const existing = await connection.getAccountInfo(positionPda);
+      if (existing) {
+        throw new Error(
+          "You already have a position on this market. One position per wallet.",
+        );
+      }
 
-      const mxePub = await getMXEPublicKey(program.provider as never, program.programId);
-      if (!mxePub) throw new Error("MXE public key not available");
+      const enc = await encryptPosition(
+        program.provider,
+        PROGRAM_ID,
+        outcome,
+        lamports,
+      );
 
-      const userPriv = x25519.utils.randomSecretKey();
-      const userPub = x25519.getPublicKey(userPriv);
-      const sharedSecret = x25519.getSharedSecret(userPriv, mxePub);
-      const cipher = new RescueCipher(sharedSecret);
+      const computationOffset = randomU64BN();
+      const compDefOffsetBytes = getCompDefAccOffset("submit_position_v2");
+      const compDefOffsetU32 = readUInt32LE(compDefOffsetBytes);
+      const compDefAccount = getCompDefAccAddress(
+        PROGRAM_ID,
+        compDefOffsetU32,
+      );
+      const computationAccount = getComputationAccAddress(
+        CLUSTER_OFFSET,
+        computationOffset,
+      );
+      const clusterAccount = getClusterAccAddress(CLUSTER_OFFSET);
+      const mxeAccount = getMXEAccAddress(PROGRAM_ID);
+      const mempoolAccount = getMempoolAccAddress(CLUSTER_OFFSET);
+      const executingPool = getExecutingPoolAccAddress(CLUSTER_OFFSET);
 
-      const nonce = randomBytesBrowser(16);
-      const encrypted = cipher.encrypt([BigInt(outcome), lamports], nonce);
-      const ciphertext = packCiphertexts(encrypted);
-      const nonceBn = new BN(deserializeLE(nonce).toString());
-
-      let queueSig: string;
+      let sig: string;
       try {
-        const builder = program.methods
+        sig = await program.methods
           .submitPosition(
             computationOffset,
-            ciphertext,
-            Array.from(userPub),
-            nonceBn,
+            enc.ciphertext,
+            enc.userPubkey,
+            new BN(enc.nonce.toString()),
             new BN(lamports.toString()),
           )
           .accountsPartial({
@@ -174,76 +149,50 @@ export function useSubmitPosition() {
             market: marketPda,
             vault: vaultPda,
             position: positionPda,
+            computationAccount,
+            clusterAccount,
             mxeAccount,
             mempoolAccount,
             executingPool,
-            computationAccount,
             compDefAccount,
-            clusterAccount,
-          });
-
-        // Force debug logs from simulation before send
-        try {
-          await builder.simulate();
-        } catch (simErr: any) {
-          const simMsg = formatAnyError(simErr);
-          throw new Error(`Simulation failed: ${simMsg}`);
-        }
-
-        queueSig = await builder.rpc({
-          commitment: "confirmed",
-          preflightCommitment: "confirmed",
-          skipPreflight: true,
-        });
+          })
+          .rpc({ commitment: "confirmed", skipPreflight: false });
       } catch (e: unknown) {
-        const raw = formatAnyError(e);
-        throw new Error(raw);
+        const raw = e instanceof Error ? e.message : String(e);
+        throw new Error(humanizeError(raw));
       }
 
-      let finalizedTxSig: string;
       try {
-        finalizedTxSig = await awaitComputationFinalization(
-          program.provider as never,
-          computationOffset,
-          program.programId,
-          "confirmed",
-          300_000,
+        const key = `pm:position:${wallet.publicKey.toBase58()}:${marketId}`;
+        localStorage.setItem(
+          key,
+          JSON.stringify({
+            outcome,
+            amountLamports: lamports.toString(),
+            signature: sig,
+            createdAt: Date.now(),
+          }),
         );
-      
-        const statusResp = await connection.getSignatureStatuses([finalizedTxSig], {
-          searchTransactionHistory: true,
-        });
-        const finalStatus = statusResp.value?.[0];
-        if (!finalStatus) {
-          throw new Error(`Queued but finalization status missing: ${finalizedTxSig}`);
-        }
-        if (finalStatus.err) {
-          throw new Error(
-            `Queued but finalization failed (${finalizedTxSig}): ${JSON.stringify(finalStatus.err)}`
-          );
-        }
-} catch (e: unknown) {
-        const raw = formatAnyError(e);
-        throw new Error(`Queued but not finalized: ${raw}`);
+      } catch {
+        /* ignore quota errors */
       }
 
       return {
-        signature: queueSig,
-        queueSig,
-        finalizedTxSig,
+        signature: sig,
         positionPda: positionPda.toBase58(),
+        computationOffset: computationOffset.toString(),
         receipt: { outcome, amountLamports: lamports.toString() },
       };
     },
     onSuccess: (r) => {
-      toast.success("Position finalized", {
-        description: `queue: ${r.queueSig.slice(0, 8)}… | final: ${r.finalizedTxSig.slice(0, 8)}…`,
+      toast.success("Position submitted", {
+        description: `Encrypted on-chain. tx: ${r.signature.slice(0, 12)}…`,
       });
     },
     onError: (err) => {
-      console.error("submit raw error:", err);
-      const msg = formatAnyError(err);
-      toast.error("Submission/Finalization failed", { description: msg.slice(0, 800) });
+      toast.error("Submit failed", {
+        description: err.message,
+      });
     },
   });
 }

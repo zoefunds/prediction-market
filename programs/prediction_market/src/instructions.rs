@@ -1,3 +1,7 @@
+pub mod cancel_market;
+pub mod withdraw_position;
+pub use cancel_market::*;
+pub use withdraw_position::*;
 pub mod claim_payout;
 pub mod create_market;
 pub mod init_comp_defs;
