@@ -35,11 +35,19 @@ pub struct Market {
     pub status: MarketStatus,
     /// After resolution, 0 = NO won, 1 = YES won.
     pub winning_outcome: u8,
-    /// Total YES pool (lamports). Updated synchronously on every YES stake.
+    /// Public reveal: total YES pool (lamports). Set on resolution.
     pub yes_pool: u64,
-    /// Total NO pool. Updated synchronously on every NO stake.
+    /// Public reveal: total NO pool. Set on resolution.
     pub no_pool: u64,
-    /// Total participants — incremented synchronously on every successful submit.
+    /// Encrypted ciphertext of `MarketTotals` while market is open.
+    /// 32 bytes is one Arcium ciphertext element; we have 3 fields packed.
+    /// Arcium ciphertext layout: 3 elements of 32 bytes each = 96 bytes.
+    pub totals_ciphertext: [u8; 96],
+    /// X25519 public key of the MXE that owns the totals ciphertext.
+    pub totals_pubkey: [u8; 32],
+    /// Nonce used for the totals ciphertext (rotates on every update).
+    pub totals_nonce: u128,
+    /// Total participants (revealed after each submission, intentionally).
     pub total_positions: u32,
     /// Bump for the Market PDA.
     pub bump: u8,

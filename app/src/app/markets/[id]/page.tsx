@@ -14,7 +14,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { getFirebase } from "@/lib/firebase/client";
 import type { Market } from "@/types";
 import { PositionDialog } from "@/components/markets/PositionDialog";
-import { CancelMarketButton } from "@/components/markets/CancelMarketButton";
 
 export default function MarketDetailPage() {
   const params = useParams<{ id: string }>();
@@ -71,7 +70,7 @@ export default function MarketDetailPage() {
             <PositionDialog
               open={side !== null}
               onOpenChange={(open) => !open && setSide(null)}
-              marketId={market.id}
+              marketPubkey={market.marketPda}
               marketQuestion={market.question || "Untitled market"}
               outcome={side ?? 1}
             />
@@ -107,6 +106,7 @@ function MarketView({
   const noPool = market.noPool ?? 0;
   const { yesPct, noPct, total } = computeOdds(yesPool, noPool);
   const hasActivity = total > 0;
+  const positionsPaused = true;
 
   return (
     <div className="space-y-6">
@@ -133,9 +133,6 @@ function MarketView({
           <span className="text-xs text-muted-foreground">
             Market #{market.id}
           </span>
-          {market.creator ? (
-            <CancelMarketButton marketId={market.id} creator={market.creator} status={market.status} />
-          ) : null}
         </div>
         <h1 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
           {market.question || "Untitled market"}
@@ -178,11 +175,18 @@ function MarketView({
         </CardHeader>
         <CardContent>
           {isOpen ? (
-            <div className="grid grid-cols-2 gap-3">
+            <>
+              {positionsPaused ? (
+                <div className="mb-3">
+                  <DevnetNotice />
+                </div>
+              ) : null}
+              <div className="grid grid-cols-2 gap-3">
               <Button
                 size="lg"
                 className="bg-[color:var(--color-yes)] text-[color:var(--color-yes-fg)] hover:brightness-110"
                 onClick={() => onPick(1)}
+                disabled={positionsPaused}
               >
                 YES {hasActivity ? `${yesPct}%` : ""}
               </Button>
@@ -191,10 +195,12 @@ function MarketView({
                 variant="outline"
                 className="border-[color:var(--color-no)]/50 text-[color:var(--color-no)] hover:bg-[color:var(--color-no)]/10"
                 onClick={() => onPick(0)}
+                disabled={positionsPaused}
               >
                 NO {hasActivity ? `${noPct}%` : ""}
               </Button>
-            </div>
+              </div>
+            </>
           ) : (
             <p className="text-sm text-muted-foreground">
               This market is no longer accepting positions.

@@ -1,15 +1,6 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
-import {
-  PublicKey,
-  Keypair,
-  SystemProgram,
-  Connection,
-  Transaction,
-  VersionedTransaction,
-  ConfirmOptions,
-  Signer,
-} from "@solana/web3.js";
+import { PublicKey, Keypair, SystemProgram } from "@solana/web3.js";
 import { PredictionMarket } from "../../target/types/prediction_market";
 import { randomBytes } from "crypto";
 import {
@@ -73,68 +64,11 @@ function packCiphertexts(cts: Array<Uint8Array | number[]>): Buffer {
   return Buffer.concat(cts.map((c) => Buffer.from(c)));
 }
 
-class RawProvider extends anchor.AnchorProvider {
-  override async sendAndConfirm(
-    tx: Transaction | VersionedTransaction,
-    signers?: Signer[],
-    opts?: ConfirmOptions,
-  ): Promise<string> {
-    const conf = opts ?? this.opts;
-    let raw: Buffer | Uint8Array;
-    let blockhash: string;
-    let lastValidBlockHeight: number;
-
-    if (tx instanceof VersionedTransaction) {
-      if (signers?.length) tx.sign(signers);
-      const signed = await this.wallet.signTransaction(tx);
-      raw = signed.serialize();
-      const bh = await this.connection.getLatestBlockhash(conf.commitment ?? "confirmed");
-      blockhash = bh.blockhash;
-      lastValidBlockHeight = bh.lastValidBlockHeight;
-    } else {
-      const legacy = tx as Transaction;
-      if (!legacy.recentBlockhash) {
-        const bh = await this.connection.getLatestBlockhash(conf.commitment ?? "confirmed");
-        legacy.recentBlockhash = bh.blockhash;
-        legacy.lastValidBlockHeight = bh.lastValidBlockHeight;
-      }
-      legacy.feePayer = legacy.feePayer ?? this.wallet.publicKey;
-      if (signers?.length) legacy.partialSign(...signers);
-      const signed = await this.wallet.signTransaction(legacy);
-      raw = signed.serialize();
-      blockhash = legacy.recentBlockhash!;
-      lastValidBlockHeight = legacy.lastValidBlockHeight!;
-    }
-
-    const sig = await this.connection.sendRawTransaction(raw, {
-      skipPreflight: conf.skipPreflight ?? true,
-      preflightCommitment: conf.preflightCommitment ?? "confirmed",
-      maxRetries: 5,
-    });
-    console.log("RawProvider tx sig:", sig);
-    await this.connection.confirmTransaction(
-      { signature: sig, blockhash, lastValidBlockHeight },
-      conf.commitment ?? "confirmed",
-    );
-    return sig;
-  }
-}
-
 // ─── Tests ────────────────────────────────────────────────────────────────
 describe("PredictionMarket", () => {
-  const RPC_URL = process.env.RPC_URL ?? "https://api.devnet.solana.com";
-  const owner = readKpJson(`${os.homedir()}/.config/solana/id.json`);
-  const connection = new Connection(RPC_URL, "confirmed");
-  const wallet = new anchor.Wallet(owner);
-  const provider = new RawProvider(connection, wallet, {
-    commitment: "confirmed",
-    skipPreflight: true,
-    preflightCommitment: "confirmed",
-  });
-  anchor.setProvider(provider);
-
-  const idl = JSON.parse(fs.readFileSync("target/idl/prediction_market.json", "utf-8"));
-  const program = new Program<PredictionMarket>(idl, provider);
+  anchor.setProvider(anchor.AnchorProvider.env());
+  const program = anchor.workspace.PredictionMarket as Program<PredictionMarket>;
+  const provider = anchor.getProvider() as anchor.AnchorProvider;
   const arciumProgram = getArciumProgram(provider);
 
   type Event = anchor.IdlEvents<(typeof program)["idl"]>;
@@ -149,9 +83,24 @@ describe("PredictionMarket", () => {
     return event;
   };
 
+  const awaitEventForMarket = async <E extends keyof Event>(
+    eventName: E,
+    marketKey: PublicKey,
+  ): Promise<Event[E]> => {
+    let listenerId: number = 0;
+    const event = await new Promise<Event[E]>((res) => {
+      listenerId = program.addEventListener(eventName, (e: any) => {
+        if (e?.market?.toString?.() === marketKey.toString()) res(e);
+      });
+    });
+    await program.removeEventListener(listenerId);
+    return event;
+  };
+
   const arciumEnv = getArciumEnv();
   const clusterAccount = getClusterAccAddress(arciumEnv.arciumClusterOffset);
 
+  const owner = readKpJson(`${os.homedir()}/.config/solana/id.json`);
 
   // Will be populated as the tests run.
   let mxePublicKey: Uint8Array;
@@ -203,8 +152,10 @@ describe("PredictionMarket", () => {
     expect(cfg.marketCount.toNumber()).to.equal(0);
   });
 
-  it.skip("initializes submit_position CompDef and uploads circuit", async () => {
+  it("initializes all three CompDefs and uploads circuits", async () => {
     await initCompDef(program, owner, "submit_position_v2");
+    await initCompDef(program, owner, "resolve_market");
+    await initCompDef(program, owner, "claim_payout");
   });
 
   it("creates a market with encrypted-zero initial totals", async () => {
@@ -268,59 +219,45 @@ describe("PredictionMarket", () => {
 
     const computationOffset = new anchor.BN(randomBytes(8), "hex");
 
-    const positionEventPromise = awaitEvent("positionSubmitted");
+    const positionEventPromise = awaitEventForMarket("positionSubmitted", marketPda);
 
-    let queueSig: string;
-    try {
-      queueSig = await program.methods
-        .submitPosition(
-          computationOffset,
-          Array.from(positionCiphertext),
-          Array.from(userPubKey),
-          new anchor.BN(deserializeLE(positionNonce).toString()),
-          new anchor.BN(amount.toString()),
-        )
-        .accountsPartial({
-          payer: owner.publicKey,
-          market: marketPda,
-          vault: vaultPda,
-          position: positionPda,
-          computationAccount: getComputationAccAddress(
-            arciumEnv.arciumClusterOffset,
-            computationOffset,
-          ),
-          clusterAccount,
-          mxeAccount: getMXEAccAddress(program.programId),
-          mempoolAccount: getMempoolAccAddress(arciumEnv.arciumClusterOffset),
-          executingPool: getExecutingPoolAccAddress(arciumEnv.arciumClusterOffset),
-          compDefAccount: getCompDefAccAddress(
-            program.programId,
-            Buffer.from(getCompDefAccOffset("submit_position_v2")).readUInt32LE(),
-          ),
-        })
-        .signers([owner])
-        .rpc({ skipPreflight: true, commitment: "confirmed" });
-
-      console.log("submit_position queue tx:", queueSig);
-    } catch (e: any) {
-      console.error("submit_position rpc failed");
-      console.error("error:", e?.message ?? e);
-      if (e?.logs) console.error("logs:\n" + e.logs.join("\n"));
-      throw e;
-    }
-
-    const finalizeSig = await Promise.race([
-      awaitComputationFinalization(
-        provider,
+    const queueSig = await program.methods
+      .submitPosition(
         computationOffset,
-        program.programId,
-        "confirmed",
-        300_000,
-      ),
-      new Promise<string>((_, rej) =>
-        setTimeout(() => rej(new Error("MPC finalization timeout after 300s")), 300_000),
-      ),
-    ]);
+        Array.from(positionCiphertext),
+        Array.from(userPubKey),
+        new anchor.BN(deserializeLE(positionNonce).toString()),
+        new anchor.BN(amount.toString()),
+      )
+      .accountsPartial({
+        payer: owner.publicKey,
+        market: marketPda,
+        vault: vaultPda,
+        position: positionPda,
+        computationAccount: getComputationAccAddress(
+          arciumEnv.arciumClusterOffset,
+          computationOffset,
+        ),
+        clusterAccount,
+        mxeAccount: getMXEAccAddress(program.programId),
+        mempoolAccount: getMempoolAccAddress(arciumEnv.arciumClusterOffset),
+        executingPool: getExecutingPoolAccAddress(arciumEnv.arciumClusterOffset),
+        compDefAccount: getCompDefAccAddress(
+          program.programId,
+          Buffer.from(getCompDefAccOffset("submit_position_v2")).readUInt32LE(),
+        ),
+      })
+      .signers([owner])
+      .rpc({ skipPreflight: true, commitment: "confirmed" });
+
+    console.log("submit_position queue tx:", queueSig);
+
+    const finalizeSig = await awaitComputationFinalization(
+      provider,
+      computationOffset,
+      program.programId,
+      "confirmed",
+    );
     console.log("submit_position finalize tx:", finalizeSig);
 
     const event = await positionEventPromise;
@@ -351,16 +288,11 @@ describe("PredictionMarket", () => {
     circuitName: "submit_position_v2" | "resolve_market" | "claim_payout",
   ): Promise<string> {
     const baseSeed = getArciumAccountBaseSeed("ComputationDefinitionAccount");
-    const compDefPDA =
-      circuitName === "submit_position_v2"
-        ? getCompDefAccAddress(
-            p.programId,
-            Buffer.from(getCompDefAccOffset("submit_position_v2")).readUInt32LE(),
-          )
-        : PublicKey.findProgramAddressSync(
-            [baseSeed, p.programId.toBuffer(), getCompDefAccOffset(circuitName)],
-            getArciumProgramId(),
-          )[0];
+    const offset = getCompDefAccOffset(circuitName);
+    const compDefPDA = PublicKey.findProgramAddressSync(
+      [baseSeed, p.programId.toBuffer(), offset],
+      getArciumProgramId(),
+    )[0];
 
     const mxeAccount = getMXEAccAddress(p.programId);
     const mxeAcc = await arciumProgram.account.mxeAccount.fetch(mxeAccount);
@@ -373,17 +305,27 @@ describe("PredictionMarket", () => {
           ? p.methods.initResolveMarketCompDef()
           : p.methods.initClaimPayoutCompDef();
 
-    const sig = await methodFn
-      .accounts({
-        compDefAccount: compDefPDA,
-        payer: o.publicKey,
-        mxeAccount,
-        addressLookupTable: lutAddress,
-      })
-      .signers([o])
-      .rpc({ commitment: "confirmed" });
-
-    console.log(`init ${circuitName} comp def:`, sig);
+    let sig: string;
+    try {
+      sig = await methodFn
+        .accounts({
+          compDefAccount: compDefPDA,
+          payer: o.publicKey,
+          mxeAccount,
+          addressLookupTable: lutAddress,
+        })
+        .signers([o])
+        .rpc({ commitment: "confirmed" });
+      console.log(`init ${circuitName} comp def:`, sig);
+    } catch (e: any) {
+      const msg = String(e?.message ?? e);
+      if (msg.includes("already in use") || msg.includes("0x0")) {
+        console.log(`init ${circuitName} comp def: already initialized, skipping`);
+        sig = "<already-initialized>";
+      } else {
+        throw e;
+      }
+    }
 
     const rawCircuit = fs.readFileSync(`build/${circuitName}.arcis`);
     await uploadCircuit(provider, circuitName, p.programId, rawCircuit, true, 500, {
