@@ -234,7 +234,7 @@ async function main() {
       executingPool: getExecutingPoolAccAddress(CLUSTER_OFFSET),
       compDefAccount: getCompDefAccAddress(
         program.programId,
-        Buffer.from(getCompDefAccOffset("resolve_market")).readUInt32LE(),
+        Buffer.from(getCompDefAccOffset("resolve_market_v2")).readUInt32LE(),
       ),
     })
     .signers([owner])
@@ -271,7 +271,7 @@ async function main() {
       executingPool: getExecutingPoolAccAddress(CLUSTER_OFFSET),
       compDefAccount: getCompDefAccAddress(
         program.programId,
-        Buffer.from(getCompDefAccOffset("claim_payout")).readUInt32LE(),
+        Buffer.from(getCompDefAccOffset("claim_payout_v2")).readUInt32LE(),
       ),
     })
     .signers([owner])

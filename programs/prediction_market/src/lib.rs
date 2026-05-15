@@ -94,12 +94,12 @@ pub mod prediction_market {
         )
     }
 
-    #[arcium_callback(encrypted_ix = "resolve_market")]
-    pub fn resolve_market_callback(
-        ctx: Context<ResolveMarketCallback>,
-        output: SignedComputationOutputs<ResolveMarketOutput>,
+    #[arcium_callback(encrypted_ix = "resolve_market_v2")]
+    pub fn resolve_market_v2_callback(
+        ctx: Context<ResolveMarketV2Callback>,
+        output: SignedComputationOutputs<ResolveMarketV2Output>,
     ) -> Result<()> {
-        instructions::resolve_market::resolve_market_callback_handler(ctx, output)
+        instructions::resolve_market::resolve_market_v2_callback_handler(ctx, output)
     }
 
     // ── Claim ───────────────────────────────────────────────────────────────
@@ -107,12 +107,12 @@ pub mod prediction_market {
         instructions::claim_payout::claim_payout_handler(ctx, computation_offset)
     }
 
-    #[arcium_callback(encrypted_ix = "claim_payout")]
-    pub fn claim_payout_callback(
-        ctx: Context<ClaimPayoutCallback>,
-        output: SignedComputationOutputs<ClaimPayoutOutput>,
+    #[arcium_callback(encrypted_ix = "claim_payout_v2")]
+    pub fn claim_payout_v2_callback(
+        ctx: Context<ClaimPayoutV2Callback>,
+        output: SignedComputationOutputs<ClaimPayoutV2Output>,
     ) -> Result<()> {
-        instructions::claim_payout::claim_payout_callback_handler(ctx, output)
+        instructions::claim_payout::claim_payout_v2_callback_handler(ctx, output)
     }
 
     // ── Cancellation & withdrawal (new) ─────────────────────────────────────
