@@ -83,6 +83,20 @@ describe("PredictionMarket", () => {
     return event;
   };
 
+  const awaitEventForMarket = async <E extends keyof Event>(
+    eventName: E,
+    marketKey: PublicKey,
+  ): Promise<Event[E]> => {
+    let listenerId: number = 0;
+    const event = await new Promise<Event[E]>((res) => {
+      listenerId = program.addEventListener(eventName, (e: any) => {
+        if (e?.market?.toString?.() === marketKey.toString()) res(e);
+      });
+    });
+    await program.removeEventListener(listenerId);
+    return event;
+  };
+
   const arciumEnv = getArciumEnv();
   const clusterAccount = getClusterAccAddress(arciumEnv.arciumClusterOffset);
 
@@ -205,7 +219,7 @@ describe("PredictionMarket", () => {
 
     const computationOffset = new anchor.BN(randomBytes(8), "hex");
 
-    const positionEventPromise = awaitEvent("positionSubmitted");
+    const positionEventPromise = awaitEventForMarket("positionSubmitted", marketPda);
 
     const queueSig = await program.methods
       .submitPosition(
@@ -291,17 +305,27 @@ describe("PredictionMarket", () => {
           ? p.methods.initResolveMarketCompDef()
           : p.methods.initClaimPayoutCompDef();
 
-    const sig = await methodFn
-      .accounts({
-        compDefAccount: compDefPDA,
-        payer: o.publicKey,
-        mxeAccount,
-        addressLookupTable: lutAddress,
-      })
-      .signers([o])
-      .rpc({ commitment: "confirmed" });
-
-    console.log(`init ${circuitName} comp def:`, sig);
+    let sig: string;
+    try {
+      sig = await methodFn
+        .accounts({
+          compDefAccount: compDefPDA,
+          payer: o.publicKey,
+          mxeAccount,
+          addressLookupTable: lutAddress,
+        })
+        .signers([o])
+        .rpc({ commitment: "confirmed" });
+      console.log(`init ${circuitName} comp def:`, sig);
+    } catch (e: any) {
+      const msg = String(e?.message ?? e);
+      if (msg.includes("already in use") || msg.includes("0x0")) {
+        console.log(`init ${circuitName} comp def: already initialized, skipping`);
+        sig = "<already-initialized>";
+      } else {
+        throw e;
+      }
+    }
 
     const rawCircuit = fs.readFileSync(`build/${circuitName}.arcis`);
     await uploadCircuit(provider, circuitName, p.programId, rawCircuit, true, 500, {
