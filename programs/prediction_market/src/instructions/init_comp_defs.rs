@@ -1,12 +1,21 @@
 use anchor_lang::prelude::*;
 use arcium_anchor::prelude::*;
+use arcium_client::idl::arcium::types::{CircuitSource, OffChainCircuitSource};
+use arcium_macros::circuit_hash;
+
+const SUBMIT_POSITION_V3_URL: &str =
+    "https://raw.githubusercontent.com/zoefunds/prediction-market/main/build/submit_position_v3.arcis";
+const RESOLVE_MARKET_V2_URL: &str =
+    "https://raw.githubusercontent.com/zoefunds/prediction-market/main/build/resolve_market_v2.arcis";
+const CLAIM_PAYOUT_V2_URL: &str =
+    "https://raw.githubusercontent.com/zoefunds/prediction-market/main/build/claim_payout_v2.arcis";
 
 use crate::ID;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // submit_position
 // ─────────────────────────────────────────────────────────────────────────────
-#[init_computation_definition_accounts("submit_position_v2", payer)]
+#[init_computation_definition_accounts("submit_position_v3", payer)]
 #[derive(Accounts)]
 pub struct InitSubmitPositionCompDef<'info> {
     #[account(mut)]
@@ -29,7 +38,11 @@ pub struct InitSubmitPositionCompDef<'info> {
 pub fn init_submit_position_comp_def_handler(
     ctx: Context<InitSubmitPositionCompDef>,
 ) -> Result<()> {
-    init_comp_def(ctx.accounts, None, None)?;
+    let source = CircuitSource::OffChain(OffChainCircuitSource {
+        source: SUBMIT_POSITION_V3_URL.to_string(),
+        hash: circuit_hash!("submit_position_v3"),
+    });
+    init_comp_def(ctx.accounts, Some(source), None)?;
     Ok(())
 }
 
@@ -59,7 +72,11 @@ pub struct InitResolveMarketCompDef<'info> {
 pub fn init_resolve_market_comp_def_handler(
     ctx: Context<InitResolveMarketCompDef>,
 ) -> Result<()> {
-    init_comp_def(ctx.accounts, None, None)?;
+    let source = CircuitSource::OffChain(OffChainCircuitSource {
+        source: RESOLVE_MARKET_V2_URL.to_string(),
+        hash: circuit_hash!("resolve_market_v2"),
+    });
+    init_comp_def(ctx.accounts, Some(source), None)?;
     Ok(())
 }
 
@@ -87,6 +104,10 @@ pub struct InitClaimPayoutCompDef<'info> {
 }
 
 pub fn init_claim_payout_comp_def_handler(ctx: Context<InitClaimPayoutCompDef>) -> Result<()> {
-    init_comp_def(ctx.accounts, None, None)?;
+    let source = CircuitSource::OffChain(OffChainCircuitSource {
+        source: CLAIM_PAYOUT_V2_URL.to_string(),
+        hash: circuit_hash!("claim_payout_v2"),
+    });
+    init_comp_def(ctx.accounts, Some(source), None)?;
     Ok(())
 }

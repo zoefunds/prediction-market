@@ -221,16 +221,16 @@ export type PredictionMarket = {
       ]
     },
     {
-      "name": "claimPayoutCallback",
+      "name": "claimPayoutV2Callback",
       "discriminator": [
-        62,
-        187,
-        84,
-        24,
-        151,
-        9,
-        17,
-        138
+        93,
+        228,
+        129,
+        144,
+        219,
+        28,
+        58,
+        66
       ],
       "accounts": [
         {
@@ -298,7 +298,7 @@ export type PredictionMarket = {
                   "kind": "type",
                   "type": {
                     "defined": {
-                      "name": "claimPayoutOutput"
+                      "name": "claimPayoutV2Output"
                     }
                   }
                 }
@@ -777,16 +777,16 @@ export type PredictionMarket = {
       ]
     },
     {
-      "name": "resolveMarketCallback",
+      "name": "resolveMarketV2Callback",
       "discriminator": [
-        222,
-        135,
-        177,
-        148,
-        20,
-        212,
-        222,
-        58
+        247,
+        91,
+        10,
+        78,
+        31,
+        122,
+        84,
+        222
       ],
       "accounts": [
         {
@@ -825,7 +825,7 @@ export type PredictionMarket = {
                   "kind": "type",
                   "type": {
                     "defined": {
-                      "name": "resolveMarketOutput"
+                      "name": "resolveMarketV2Output"
                     }
                   }
                 }
@@ -1594,7 +1594,7 @@ export type PredictionMarket = {
       }
     },
     {
-      "name": "claimPayoutOutput",
+      "name": "claimPayoutV2Output",
       "docs": [
         "The output of the callback instruction. Provided as a struct with ordered fields",
         "as anchor does not support tuples and tuple structs yet."
@@ -1606,7 +1606,7 @@ export type PredictionMarket = {
             "name": "field0",
             "type": {
               "defined": {
-                "name": "claimPayoutOutputStruct0"
+                "name": "claimPayoutV2OutputStruct0"
               }
             }
           }
@@ -1614,7 +1614,7 @@ export type PredictionMarket = {
       }
     },
     {
-      "name": "claimPayoutOutputStruct0",
+      "name": "claimPayoutV2OutputStruct0",
       "type": {
         "kind": "struct",
         "fields": [
@@ -2704,7 +2704,7 @@ export type PredictionMarket = {
       }
     },
     {
-      "name": "resolveMarketOutput",
+      "name": "resolveMarketV2Output",
       "docs": [
         "The output of the callback instruction. Provided as a struct with ordered fields",
         "as anchor does not support tuples and tuple structs yet."
@@ -2716,7 +2716,7 @@ export type PredictionMarket = {
             "name": "field0",
             "type": {
               "defined": {
-                "name": "resolveMarketOutputStruct0"
+                "name": "resolveMarketV2OutputStruct0"
               }
             }
           }
@@ -2724,7 +2724,7 @@ export type PredictionMarket = {
       }
     },
     {
-      "name": "resolveMarketOutputStruct0",
+      "name": "resolveMarketV2OutputStruct0",
       "type": {
         "kind": "struct",
         "fields": [

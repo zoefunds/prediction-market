@@ -153,7 +153,7 @@ describe("PredictionMarket", () => {
   });
 
   it("initializes all three CompDefs and uploads circuits", async () => {
-    await initCompDef(program, owner, "submit_position_v2");
+    await initCompDef(program, owner, "submit_position_v3");
     await initCompDef(program, owner, "resolve_market_v2");
     await initCompDef(program, owner, "claim_payout_v2");
   });
@@ -244,7 +244,7 @@ describe("PredictionMarket", () => {
         executingPool: getExecutingPoolAccAddress(arciumEnv.arciumClusterOffset),
         compDefAccount: getCompDefAccAddress(
           program.programId,
-          Buffer.from(getCompDefAccOffset("submit_position_v2")).readUInt32LE(),
+          Buffer.from(getCompDefAccOffset("submit_position_v3")).readUInt32LE(),
         ),
       })
       .signers([owner])
@@ -285,7 +285,7 @@ describe("PredictionMarket", () => {
   async function initCompDef(
     p: Program<PredictionMarket>,
     o: Keypair,
-    circuitName: "submit_position_v2" | "resolve_market_v2" | "claim_payout_v2",
+    circuitName: "submit_position_v3" | "resolve_market_v2" | "claim_payout_v2",
   ): Promise<string> {
     const baseSeed = getArciumAccountBaseSeed("ComputationDefinitionAccount");
     const offset = getCompDefAccOffset(circuitName);
@@ -299,7 +299,7 @@ describe("PredictionMarket", () => {
     const lutAddress = getLookupTableAddress(p.programId, mxeAcc.lutOffsetSlot);
 
     const methodFn =
-      circuitName === "submit_position_v2"
+      circuitName === "submit_position_v3"
         ? p.methods.initSubmitPositionCompDef()
         : circuitName === "resolve_market_v2"
           ? p.methods.initResolveMarketCompDef()

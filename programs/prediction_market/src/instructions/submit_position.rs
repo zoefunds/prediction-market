@@ -11,10 +11,10 @@ use crate::{
     ArciumSignerAccount, ID, ID_CONST,
 };
 
-#[queue_computation_accounts("submit_position_v2", payer)]
+#[queue_computation_accounts("submit_position_v3", payer)]
 #[derive(Accounts)]
 #[instruction(computation_offset: u64)]
-pub struct SubmitPositionV2<'info> {
+pub struct SubmitPositionV3<'info> {
     #[account(mut)]
     pub payer: Signer<'info>,
 
@@ -76,7 +76,7 @@ pub struct SubmitPositionV2<'info> {
 }
 
 pub fn submit_position_handler(
-    ctx: Context<SubmitPositionV2>,
+    ctx: Context<SubmitPositionV3>,
     computation_offset: u64,
     position_ciphertext: [u8; 64],
     user_pubkey: [u8; 32],
@@ -145,7 +145,7 @@ pub fn submit_position_handler(
         ctx.accounts,
         computation_offset,
         args,
-        vec![SubmitPositionV2Callback::callback_ix(
+        vec![SubmitPositionV3Callback::callback_ix(
             computation_offset,
             &ctx.accounts.mxe_account,
             &extra_accounts,
@@ -165,9 +165,9 @@ pub fn submit_position_handler(
     Ok(())
 }
 
-#[callback_accounts("submit_position_v2")]
+#[callback_accounts("submit_position_v3")]
 #[derive(Accounts)]
-pub struct SubmitPositionV2Callback<'info> {
+pub struct SubmitPositionV3Callback<'info> {
     pub arcium_program: Program<'info, Arcium>,
     #[account(address = derive_comp_def_pda!(COMP_DEF_OFFSET_SUBMIT_POSITION))]
     pub comp_def_account: Box<Account<'info, ComputationDefinitionAccount>>,
@@ -188,9 +188,9 @@ pub struct SubmitPositionV2Callback<'info> {
     pub position: Box<Account<'info, Position>>,
 }
 
-pub fn submit_position_v2_callback_handler(
-    ctx: Context<SubmitPositionV2Callback>,
-    output: SignedComputationOutputs<SubmitPositionV2Output>,
+pub fn submit_position_v3_callback_handler(
+    ctx: Context<SubmitPositionV3Callback>,
+    output: SignedComputationOutputs<SubmitPositionV3Output>,
 ) -> Result<()> {
     let outputs = match output.verify_output(
         &ctx.accounts.cluster_account,
