@@ -78,3 +78,5 @@ workers/indexer/__pycache__/
 workers/indexer/src/__pycache__/
 workers/indexer/*.pyc
 secrets/
+
+!build/*.arcis

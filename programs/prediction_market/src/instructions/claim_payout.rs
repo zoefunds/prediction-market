@@ -10,7 +10,7 @@ use crate::{
     ArciumSignerAccount, ID, ID_CONST,
 };
 
-#[queue_computation_accounts("claim_payout", payer)]
+#[queue_computation_accounts("claim_payout_v2", payer)]
 #[derive(Accounts)]
 #[instruction(computation_offset: u64)]
 pub struct ClaimPayout<'info> {
@@ -102,7 +102,7 @@ pub fn claim_payout_handler(
         ctx.accounts,
         computation_offset,
         args,
-        vec![ClaimPayoutCallback::callback_ix(
+        vec![ClaimPayoutV2Callback::callback_ix(
             computation_offset,
             &ctx.accounts.mxe_account,
             &extra_accounts,
@@ -114,9 +114,9 @@ pub fn claim_payout_handler(
     Ok(())
 }
 
-#[callback_accounts("claim_payout")]
+#[callback_accounts("claim_payout_v2")]
 #[derive(Accounts)]
-pub struct ClaimPayoutCallback<'info> {
+pub struct ClaimPayoutV2Callback<'info> {
     pub arcium_program: Program<'info, Arcium>,
     #[account(address = derive_comp_def_pda!(COMP_DEF_OFFSET_CLAIM_PAYOUT))]
     pub comp_def_account: Box<Account<'info, ComputationDefinitionAccount>>,
@@ -145,9 +145,9 @@ pub struct ClaimPayoutCallback<'info> {
     pub vault: UncheckedAccount<'info>,
 }
 
-pub fn claim_payout_callback_handler(
-    ctx: Context<ClaimPayoutCallback>,
-    output: SignedComputationOutputs<ClaimPayoutOutput>,
+pub fn claim_payout_v2_callback_handler(
+    ctx: Context<ClaimPayoutV2Callback>,
+    output: SignedComputationOutputs<ClaimPayoutV2Output>,
 ) -> Result<()> {
     let result = match output.verify_output(
         &ctx.accounts.cluster_account,

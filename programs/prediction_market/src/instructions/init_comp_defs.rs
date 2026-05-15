@@ -36,7 +36,7 @@ pub fn init_submit_position_comp_def_handler(
 // ─────────────────────────────────────────────────────────────────────────────
 // resolve_market
 // ─────────────────────────────────────────────────────────────────────────────
-#[init_computation_definition_accounts("resolve_market", payer)]
+#[init_computation_definition_accounts("resolve_market_v2", payer)]
 #[derive(Accounts)]
 pub struct InitResolveMarketCompDef<'info> {
     #[account(mut)]
@@ -66,7 +66,7 @@ pub fn init_resolve_market_comp_def_handler(
 // ─────────────────────────────────────────────────────────────────────────────
 // claim_payout
 // ─────────────────────────────────────────────────────────────────────────────
-#[init_computation_definition_accounts("claim_payout", payer)]
+#[init_computation_definition_accounts("claim_payout_v2", payer)]
 #[derive(Accounts)]
 pub struct InitClaimPayoutCompDef<'info> {
     #[account(mut)]

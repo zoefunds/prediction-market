@@ -14,6 +14,6 @@ pub const MAX_CATEGORY_LEN: usize = 32;
 pub const COMP_DEF_OFFSET_SUBMIT_POSITION: u32 =
     arcium_anchor::comp_def_offset("submit_position_v2");
 pub const COMP_DEF_OFFSET_RESOLVE_MARKET: u32 =
-    arcium_anchor::comp_def_offset("resolve_market");
+    arcium_anchor::comp_def_offset("resolve_market_v2");
 pub const COMP_DEF_OFFSET_CLAIM_PAYOUT: u32 =
-    arcium_anchor::comp_def_offset("claim_payout");
+    arcium_anchor::comp_def_offset("claim_payout_v2");

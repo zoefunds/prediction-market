@@ -10,7 +10,7 @@ use crate::{
     ArciumSignerAccount, ID, ID_CONST,
 };
 
-#[queue_computation_accounts("resolve_market", payer)]
+#[queue_computation_accounts("resolve_market_v2", payer)]
 #[derive(Accounts)]
 #[instruction(computation_offset: u64)]
 pub struct RequestResolution<'info> {
@@ -104,7 +104,7 @@ pub fn request_resolution_handler(
         ctx.accounts,
         computation_offset,
         args,
-        vec![ResolveMarketCallback::callback_ix(
+        vec![ResolveMarketV2Callback::callback_ix(
             computation_offset,
             &ctx.accounts.mxe_account,
             &extra_accounts,
@@ -122,9 +122,9 @@ pub fn request_resolution_handler(
     Ok(())
 }
 
-#[callback_accounts("resolve_market")]
+#[callback_accounts("resolve_market_v2")]
 #[derive(Accounts)]
-pub struct ResolveMarketCallback<'info> {
+pub struct ResolveMarketV2Callback<'info> {
     pub arcium_program: Program<'info, Arcium>,
     #[account(address = derive_comp_def_pda!(COMP_DEF_OFFSET_RESOLVE_MARKET))]
     pub comp_def_account: Box<Account<'info, ComputationDefinitionAccount>>,
@@ -142,9 +142,9 @@ pub struct ResolveMarketCallback<'info> {
     pub market: Box<Account<'info, Market>>,
 }
 
-pub fn resolve_market_callback_handler(
-    ctx: Context<ResolveMarketCallback>,
-    output: SignedComputationOutputs<ResolveMarketOutput>,
+pub fn resolve_market_v2_callback_handler(
+    ctx: Context<ResolveMarketV2Callback>,
+    output: SignedComputationOutputs<ResolveMarketV2Output>,
 ) -> Result<()> {
     let result = match output.verify_output(
         &ctx.accounts.cluster_account,

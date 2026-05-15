@@ -154,8 +154,8 @@ describe("PredictionMarket", () => {
 
   it("initializes all three CompDefs and uploads circuits", async () => {
     await initCompDef(program, owner, "submit_position_v2");
-    await initCompDef(program, owner, "resolve_market");
-    await initCompDef(program, owner, "claim_payout");
+    await initCompDef(program, owner, "resolve_market_v2");
+    await initCompDef(program, owner, "claim_payout_v2");
   });
 
   it("creates a market with encrypted-zero initial totals", async () => {
@@ -285,7 +285,7 @@ describe("PredictionMarket", () => {
   async function initCompDef(
     p: Program<PredictionMarket>,
     o: Keypair,
-    circuitName: "submit_position_v2" | "resolve_market" | "claim_payout",
+    circuitName: "submit_position_v2" | "resolve_market_v2" | "claim_payout_v2",
   ): Promise<string> {
     const baseSeed = getArciumAccountBaseSeed("ComputationDefinitionAccount");
     const offset = getCompDefAccOffset(circuitName);
@@ -301,7 +301,7 @@ describe("PredictionMarket", () => {
     const methodFn =
       circuitName === "submit_position_v2"
         ? p.methods.initSubmitPositionCompDef()
-        : circuitName === "resolve_market"
+        : circuitName === "resolve_market_v2"
           ? p.methods.initResolveMarketCompDef()
           : p.methods.initClaimPayoutCompDef();
 

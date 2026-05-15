@@ -38,7 +38,7 @@ mod circuits {
     }
 
     #[instruction]
-    pub fn resolve_market(
+    pub fn resolve_market_v2(
         outcome_ctxt: Enc<Shared, u8>,
         totals_ctxt: Enc<Mxe, MarketTotals>,
     ) -> (u8, u64, u64) {
@@ -48,7 +48,7 @@ mod circuits {
     }
 
     #[instruction]
-    pub fn claim_payout(
+    pub fn claim_payout_v2(
         user_position_ctxt: Enc<Shared, PositionInput>,
         winning_outcome: u8,
     ) -> (bool, u64) {
