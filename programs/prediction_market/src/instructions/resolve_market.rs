@@ -75,7 +75,6 @@ pub fn request_resolution_handler(
     require!(now >= ctx.accounts.market.close_ts, ErrorCode::MarketNotClosed);
 
     let market_key = ctx.accounts.market.key();
-    let totals_pubkey = ctx.accounts.market.totals_pubkey;
     let totals_nonce = ctx.accounts.market.totals_nonce;
     let totals_ciphertext = ctx.accounts.market.totals_ciphertext;
 
@@ -90,7 +89,6 @@ pub fn request_resolution_handler(
         .x25519_pubkey(resolver_pubkey)
         .plaintext_u128(nonce)
         .encrypted_u8(outcome_ciphertext)
-        .x25519_pubkey(totals_pubkey)
         .plaintext_u128(totals_nonce)
         .encrypted_u64(slice_32(&totals_ciphertext, 0))
         .encrypted_u64(slice_32(&totals_ciphertext, 1))
@@ -111,7 +109,7 @@ pub fn request_resolution_handler(
             &ctx.accounts.mxe_account,
             &extra_accounts,
         )?],
-        3,
+        1,
         0,
     )?;
 

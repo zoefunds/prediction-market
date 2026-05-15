@@ -107,7 +107,7 @@ pub fn claim_payout_handler(
             &ctx.accounts.mxe_account,
             &extra_accounts,
         )?],
-        2,
+        1,
         0,
     )?;
 
