@@ -26,7 +26,8 @@ import { PredictionMarket } from "../target/types/prediction_market";
 type CircuitName =
   | "submit_position_v3"
   | "resolve_market_v2"
-  | "claim_payout_v2";
+  | "claim_payout_v2"
+  | "init_market_totals";
 
 function readKeypair(path: string): Keypair {
   return Keypair.fromSecretKey(
@@ -109,7 +110,7 @@ async function main() {
   const baseSeed = getArciumAccountBaseSeed("ComputationDefinitionAccount");
 
   // Process only this list — change as needed for re-uploads.
-  const circuits: CircuitName[] = ["submit_position_v3", "resolve_market_v2", "claim_payout_v2"];
+  const circuits: CircuitName[] = ["init_market_totals", "submit_position_v3", "resolve_market_v2", "claim_payout_v2"];
 
   for (const name of circuits) {
     console.log(`\n──── ${name} ────`);
@@ -129,7 +130,9 @@ async function main() {
           ? program.methods.initSubmitPositionCompDef()
           : name === "resolve_market_v2"
             ? program.methods.initResolveMarketCompDef()
-            : program.methods.initClaimPayoutCompDef();
+            : name === "claim_payout_v2"
+              ? program.methods.initClaimPayoutCompDef()
+              : program.methods.initInitMarketTotalsCompDef();
 
       const sig = await methodFn
         .accounts({
