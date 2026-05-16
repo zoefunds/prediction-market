@@ -486,6 +486,232 @@ export type PredictionMarket = {
       "args": []
     },
     {
+      "name": "initInitMarketTotalsCompDef",
+      "discriminator": [
+        2,
+        46,
+        11,
+        74,
+        130,
+        63,
+        222,
+        225
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "mxeAccount",
+          "writable": true
+        },
+        {
+          "name": "compDefAccount",
+          "writable": true
+        },
+        {
+          "name": "addressLookupTable",
+          "writable": true
+        },
+        {
+          "name": "lutProgram",
+          "address": "AddressLookupTab1e1111111111111111111111111"
+        },
+        {
+          "name": "arciumProgram",
+          "address": "Arcj82pX7HxYKLR92qvgZUAd7vGS1k4hQvAFcPATFdEQ"
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "initMarketTotals",
+      "discriminator": [
+        0,
+        149,
+        123,
+        61,
+        70,
+        74,
+        48,
+        155
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "market",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market.id",
+                "account": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "signPdaAccount",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  65,
+                  114,
+                  99,
+                  105,
+                  117,
+                  109,
+                  83,
+                  105,
+                  103,
+                  110,
+                  101,
+                  114,
+                  65,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mxeAccount"
+        },
+        {
+          "name": "mempoolAccount",
+          "writable": true
+        },
+        {
+          "name": "executingPool",
+          "writable": true
+        },
+        {
+          "name": "computationAccount",
+          "writable": true
+        },
+        {
+          "name": "compDefAccount"
+        },
+        {
+          "name": "clusterAccount",
+          "writable": true
+        },
+        {
+          "name": "poolAccount",
+          "writable": true,
+          "address": "G2sRWJvi3xoyh5k2gY49eG9L8YhAEWQPtNb1zb1GXTtC"
+        },
+        {
+          "name": "clockAccount",
+          "writable": true,
+          "address": "7EbMUTLo5DjdzbN7s8BXeZwXzEwNQb1hScfRvWg8a6ot"
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "arciumProgram",
+          "address": "Arcj82pX7HxYKLR92qvgZUAd7vGS1k4hQvAFcPATFdEQ"
+        }
+      ],
+      "args": [
+        {
+          "name": "computationOffset",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "initMarketTotalsCallback",
+      "discriminator": [
+        59,
+        191,
+        161,
+        100,
+        161,
+        2,
+        115,
+        223
+      ],
+      "accounts": [
+        {
+          "name": "arciumProgram",
+          "address": "Arcj82pX7HxYKLR92qvgZUAd7vGS1k4hQvAFcPATFdEQ"
+        },
+        {
+          "name": "compDefAccount"
+        },
+        {
+          "name": "mxeAccount"
+        },
+        {
+          "name": "computationAccount"
+        },
+        {
+          "name": "clusterAccount"
+        },
+        {
+          "name": "instructionsSysvar",
+          "address": "Sysvar1nstructions1111111111111111111111111"
+        },
+        {
+          "name": "market",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "output",
+          "type": {
+            "defined": {
+              "name": "signedComputationOutputs",
+              "generics": [
+                {
+                  "kind": "type",
+                  "type": {
+                    "defined": {
+                      "name": "initMarketTotalsOutput"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "initResolveMarketCompDef",
       "discriminator": [
         78,
@@ -1928,6 +2154,32 @@ export type PredictionMarket = {
           {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "initMarketTotalsOutput",
+      "docs": [
+        "The output of the callback instruction. Provided as a struct with ordered fields",
+        "as anchor does not support tuples and tuple structs yet."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "field0",
+            "type": {
+              "defined": {
+                "name": "mxeEncryptedStruct",
+                "generics": [
+                  {
+                    "kind": "const",
+                    "value": "3"
+                  }
+                ]
+              }
+            }
           }
         ]
       }

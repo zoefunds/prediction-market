@@ -155,4 +155,10 @@ pub mod prediction_market {
     pub fn init_claim_payout_comp_def(ctx: Context<InitClaimPayoutCompDef>) -> Result<()> {
         instructions::init_comp_defs::init_claim_payout_comp_def_handler(ctx)
     }
+
+    pub fn init_init_market_totals_comp_def(
+        ctx: Context<InitInitMarketTotalsCompDef>,
+    ) -> Result<()> {
+        instructions::init_comp_defs::init_init_market_totals_comp_def_handler(ctx)
+    }
 }

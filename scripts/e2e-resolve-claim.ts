@@ -159,6 +159,32 @@ async function main() {
     .rpc({ commitment: "confirmed" });
   console.log("    marketPda:", marketPda.toBase58());
 
+  // ── 2b. MPC: convert initial Enc<Shared> totals -> Enc<Mxe> ──────────────
+  console.log("\n[2b] Converting initial totals Enc<Shared> -> Enc<Mxe> via MPC...");
+  const initOffset = new anchor.BN(randomBytes(8), undefined, "le");
+  const initSig = await program.methods
+    .initMarketTotals(initOffset)
+    .accountsPartial({
+      payer: owner.publicKey,
+      market: marketPda,
+      computationAccount: getComputationAccAddress(CLUSTER_OFFSET, initOffset),
+      clusterAccount: getClusterAccAddress(CLUSTER_OFFSET),
+      mxeAccount: getMXEAccAddress(program.programId),
+      mempoolAccount: getMempoolAccAddress(CLUSTER_OFFSET),
+      executingPool: getExecutingPoolAccAddress(CLUSTER_OFFSET),
+      compDefAccount: getCompDefAccAddress(
+        program.programId,
+        Buffer.from(getCompDefAccOffset("init_market_totals")).readUInt32LE(),
+      ),
+    })
+    .signers([owner])
+    .rpc({ skipPreflight: true, commitment: "confirmed" });
+  console.log("    queue tx:", initSig);
+  const initFinalize = await awaitComputationFinalization(
+    provider, initOffset, program.programId, "confirmed",
+  );
+  console.log("    finalize tx:", initFinalize);
+
   // ── 3. Submit encrypted YES position (0.05 SOL) ──────────────────────────
   console.log("\n[3] Submitting encrypted YES position (0.05 SOL)...");
   const stakeAmount = BigInt(50_000_000);
