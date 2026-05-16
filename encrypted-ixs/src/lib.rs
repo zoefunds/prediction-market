@@ -19,6 +19,14 @@ mod circuits {
     /// callback fits in one Solana tx. The user keeps their plaintext locally
     /// and re-supplies it for claim.
     #[instruction]
+    pub fn init_market_totals(
+        totals_ctxt: Enc<Shared, MarketTotals>,
+    ) -> Enc<Mxe, MarketTotals> {
+        let totals = totals_ctxt.to_arcis();
+        Mxe::get().from_arcis(totals)
+    }
+
+    #[instruction]
     pub fn submit_position_v3(
         position_ctxt: Enc<Shared, PositionInput>,
         totals_ctxt: Enc<Mxe, MarketTotals>,

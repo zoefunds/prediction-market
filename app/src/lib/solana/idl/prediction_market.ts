@@ -1035,16 +1035,16 @@ export type PredictionMarket = {
       ]
     },
     {
-      "name": "submitPositionV2Callback",
+      "name": "submitPositionV3Callback",
       "discriminator": [
-        75,
+        13,
+        10,
         59,
-        240,
-        206,
         152,
-        52,
-        15,
-        78
+        27,
+        127,
+        156,
+        141
       ],
       "accounts": [
         {
@@ -1087,7 +1087,7 @@ export type PredictionMarket = {
                   "kind": "type",
                   "type": {
                     "defined": {
-                      "name": "submitPositionV2Output"
+                      "name": "submitPositionV3Output"
                     }
                   }
                 }
@@ -2821,7 +2821,7 @@ export type PredictionMarket = {
       }
     },
     {
-      "name": "submitPositionV2Output",
+      "name": "submitPositionV3Output",
       "docs": [
         "The output of the callback instruction. Provided as a struct with ordered fields",
         "as anchor does not support tuples and tuple structs yet."

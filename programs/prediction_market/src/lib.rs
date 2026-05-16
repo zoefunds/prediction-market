@@ -51,6 +51,21 @@ pub mod prediction_market {
     }
 
     // ── Position submission (encrypted) ─────────────────────────────────────
+    pub fn init_market_totals(
+        ctx: Context<InitMarketTotals>,
+        computation_offset: u64,
+    ) -> Result<()> {
+        instructions::init_market_totals::init_market_totals_handler(ctx, computation_offset)
+    }
+
+    #[arcium_callback(encrypted_ix = "init_market_totals")]
+    pub fn init_market_totals_callback(
+        ctx: Context<InitMarketTotalsCallback>,
+        output: SignedComputationOutputs<InitMarketTotalsOutput>,
+    ) -> Result<()> {
+        instructions::init_market_totals::init_market_totals_callback_handler(ctx, output)
+    }
+
     pub fn submit_position(
         ctx: Context<SubmitPositionV3>,
         computation_offset: u64,

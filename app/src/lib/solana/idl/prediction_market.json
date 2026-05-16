@@ -1029,16 +1029,16 @@
       ]
     },
     {
-      "name": "submit_position_v2_callback",
+      "name": "submit_position_v3_callback",
       "discriminator": [
-        75,
+        13,
+        10,
         59,
-        240,
-        206,
         152,
-        52,
-        15,
-        78
+        27,
+        127,
+        156,
+        141
       ],
       "accounts": [
         {
@@ -1081,7 +1081,7 @@
                   "kind": "type",
                   "type": {
                     "defined": {
-                      "name": "SubmitPositionV2Output"
+                      "name": "SubmitPositionV3Output"
                     }
                   }
                 }
@@ -2815,7 +2815,7 @@
       }
     },
     {
-      "name": "SubmitPositionV2Output",
+      "name": "SubmitPositionV3Output",
       "docs": [
         "The output of the callback instruction. Provided as a struct with ordered fields",
         "as anchor does not support tuples and tuple structs yet."
