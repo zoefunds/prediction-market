@@ -3,6 +3,8 @@ use arcium_anchor::prelude::*;
 use arcium_client::idl::arcium::types::{CircuitSource, OffChainCircuitSource};
 use arcium_macros::circuit_hash;
 
+const INIT_MARKET_TOTALS_URL: &str =
+    "https://raw.githubusercontent.com/zoefunds/prediction-market/main/build/init_market_totals.arcis";
 const SUBMIT_POSITION_V3_URL: &str =
     "https://raw.githubusercontent.com/zoefunds/prediction-market/main/build/submit_position_v3.arcis";
 const RESOLVE_MARKET_V2_URL: &str =
@@ -107,6 +109,40 @@ pub fn init_claim_payout_comp_def_handler(ctx: Context<InitClaimPayoutCompDef>) 
     let source = CircuitSource::OffChain(OffChainCircuitSource {
         source: CLAIM_PAYOUT_V2_URL.to_string(),
         hash: circuit_hash!("claim_payout_v2"),
+    });
+    init_comp_def(ctx.accounts, Some(source), None)?;
+    Ok(())
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// init_market_totals
+// ─────────────────────────────────────────────────────────────────────────────
+#[init_computation_definition_accounts("init_market_totals", payer)]
+#[derive(Accounts)]
+pub struct InitInitMarketTotalsCompDef<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    #[account(mut, address = derive_mxe_pda!())]
+    pub mxe_account: Box<Account<'info, MXEAccount>>,
+    #[account(mut)]
+    /// CHECK: comp_def_account, checked by arcium program.
+    pub comp_def_account: UncheckedAccount<'info>,
+    #[account(mut, address = derive_mxe_lut_pda!(mxe_account.lut_offset_slot))]
+    /// CHECK: address_lookup_table, checked by arcium program.
+    pub address_lookup_table: UncheckedAccount<'info>,
+    #[account(address = LUT_PROGRAM_ID)]
+    /// CHECK: lut_program.
+    pub lut_program: UncheckedAccount<'info>,
+    pub arcium_program: Program<'info, Arcium>,
+    pub system_program: Program<'info, System>,
+}
+
+pub fn init_init_market_totals_comp_def_handler(
+    ctx: Context<InitInitMarketTotalsCompDef>,
+) -> Result<()> {
+    let source = CircuitSource::OffChain(OffChainCircuitSource {
+        source: INIT_MARKET_TOTALS_URL.to_string(),
+        hash: circuit_hash!("init_market_totals"),
     });
     init_comp_def(ctx.accounts, Some(source), None)?;
     Ok(())
